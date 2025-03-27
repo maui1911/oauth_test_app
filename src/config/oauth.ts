@@ -18,18 +18,18 @@ export function getOAuthSettings(): OAuthSettings {
     clientSecret: import.meta.env.VITE_OAUTH_CLIENT_SECRET,
     redirectUri: import.meta.env.VITE_OAUTH_REDIRECT_URI,
     protectedResource: import.meta.env.VITE_OAUTH_PROTECTED_RESOURCE,
-    scope: 'openid profile email',
+    scope: "openid profile email",
     endpoints: {
-      authorize: '/oauth2/authorize',
-      token: '/oauth2/token'
-    }
+      authorize: "/connect/authorize",
+      token: "/connect/token",
+    },
   };
 }
 
 export const saveOAuthSettings = (settings: OAuthSettings) => {
-  localStorage.setItem('oauth_settings', JSON.stringify(settings));
+  localStorage.setItem("oauth_settings", JSON.stringify(settings));
 };
 
 export const resetOAuthSettings = () => {
-  localStorage.removeItem('oauth_settings');
-}; 
+  localStorage.removeItem("oauth_settings");
+};
