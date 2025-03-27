@@ -23,16 +23,38 @@ A modern React application for testing OAuth 2.1 flows, built with TypeScript an
 
 1. Clone the repository:
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/maui1911/oauth_test_app.git
    cd oauth-test
    ```
 
-2. Install dependencies:
+2. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Edit the `.env` file with your OAuth configuration:
+   ```env
+   # OAuth Configuration
+   VITE_OAUTH_BASE_URL=https://your-oauth-server.com
+   VITE_OAUTH_CLIENT_ID=your_client_id
+   VITE_OAUTH_CLIENT_SECRET=your_client_secret
+   VITE_OAUTH_REDIRECT_URI=http://localhost:3000/callback
+   VITE_OAUTH_PROTECTED_RESOURCE=https://your-oauth-server.com/api/resource
+   ```
+
+   Required Environment Variables:
+   - `VITE_OAUTH_BASE_URL`: The base URL of your OAuth server
+   - `VITE_OAUTH_CLIENT_ID`: Your OAuth client ID
+   - `VITE_OAUTH_CLIENT_SECRET`: Your OAuth client secret
+   - `VITE_OAUTH_REDIRECT_URI`: The callback URL for the Authorization Code flow (default: http://localhost:3000/callback)
+   - `VITE_OAUTH_PROTECTED_RESOURCE`: The URL of your protected resource endpoint
+
+3. Install dependencies:
    ```bash
    npm install
    ```
 
-3. Start the development server:
+4. Start the development server:
    ```bash
    npm run dev
    ```
@@ -41,32 +63,26 @@ The application will be available at `http://localhost:3000`.
 
 ## Docker Deployment
 
-1. Build the Docker image:
+1. Make sure you have created and configured the `.env` file as described above.
+
+2. Build and run with Docker Compose:
    ```bash
-   docker build -t oauth-test-app .
+   docker compose up --build
    ```
 
-2. Run the container:
+   Or build and run manually:
    ```bash
+   docker build -t oauth-test-app .
    docker run -p 3000:80 oauth-test-app
    ```
 
-Alternatively, use Docker Compose:
-```bash
-docker-compose up --build
-```
-
 ## Configuration
 
-The application allows you to configure:
-- Base URL
-- Client ID
-- Client Secret
-- Redirect URI
-- Protected Resource URL
-- OAuth Scope
+The application allows you to configure OAuth settings through:
+1. Environment variables (recommended for deployment)
+2. UI settings panel (useful for testing different configurations)
 
-These settings can be modified through the UI and are persisted in localStorage.
+All settings are persisted in localStorage when changed through the UI.
 
 ## Development
 
