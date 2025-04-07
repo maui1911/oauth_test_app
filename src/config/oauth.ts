@@ -11,19 +11,25 @@ export interface OAuthSettings {
   };
 }
 
+const DEFAULT_SETTINGS: OAuthSettings = {
+  baseUrl: "https://your-oauth-server.com",
+  clientId: "your_client_id",
+  clientSecret: "your_client_secret",
+  redirectUri: "http://localhost:3000/callback",
+  protectedResource: "https://your-oauth-server.com/api/resource",
+  scope: "openid profile email",
+  endpoints: {
+    authorize: "/connect/authorize",
+    token: "/connect/token",
+  },
+};
+
 export function getOAuthSettings(): OAuthSettings {
-  return {
-    baseUrl: import.meta.env.VITE_OAUTH_BASE_URL,
-    clientId: import.meta.env.VITE_OAUTH_CLIENT_ID,
-    clientSecret: import.meta.env.VITE_OAUTH_CLIENT_SECRET,
-    redirectUri: import.meta.env.VITE_OAUTH_REDIRECT_URI,
-    protectedResource: import.meta.env.VITE_OAUTH_PROTECTED_RESOURCE,
-    scope: "openid profile email",
-    endpoints: {
-      authorize: "/connect/authorize",
-      token: "/connect/token",
-    },
-  };
+  const storedSettings = localStorage.getItem("oauth_settings");
+  if (storedSettings) {
+    return JSON.parse(storedSettings);
+  }
+  return DEFAULT_SETTINGS;
 }
 
 export const saveOAuthSettings = (settings: OAuthSettings) => {

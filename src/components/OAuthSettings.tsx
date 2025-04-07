@@ -45,12 +45,20 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               <p className="text-sm text-gray-900">{settings.clientId}</p>
             </div>
             <div>
+              <p className="text-sm font-medium text-gray-500">Client Secret</p>
+              <p className="text-sm text-gray-900">••••••••</p>
+            </div>
+            <div>
               <p className="text-sm font-medium text-gray-500">Redirect URI</p>
               <p className="text-sm text-gray-900">{settings.redirectUri}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500">Protected Resource</p>
               <p className="text-sm text-gray-900">{settings.protectedResource}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Scope</p>
+              <p className="text-sm text-gray-900">{settings.scope}</p>
             </div>
           </div>
         </div>
@@ -92,6 +100,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               value={settings.baseUrl}
               onChange={(e) => setSettings({ ...settings, baseUrl: e.target.value })}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              placeholder="https://your-oauth-server.com"
             />
           </div>
           <div>
@@ -101,6 +110,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               value={settings.clientId}
               onChange={(e) => setSettings({ ...settings, clientId: e.target.value })}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              placeholder="your_client_id"
             />
           </div>
           <div>
@@ -110,6 +120,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               value={settings.clientSecret}
               onChange={(e) => setSettings({ ...settings, clientSecret: e.target.value })}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              placeholder="your_client_secret"
             />
           </div>
           <div>
@@ -119,6 +130,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               value={settings.redirectUri}
               onChange={(e) => setSettings({ ...settings, redirectUri: e.target.value })}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              placeholder="http://localhost:3000/callback"
             />
           </div>
           <div>
@@ -128,6 +140,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               value={settings.protectedResource}
               onChange={(e) => setSettings({ ...settings, protectedResource: e.target.value })}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              placeholder="https://your-oauth-server.com/api/resource"
             />
           </div>
           <div>
@@ -137,6 +150,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               value={settings.scope}
               onChange={(e) => setSettings({ ...settings, scope: e.target.value })}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              placeholder="openid profile email"
             />
           </div>
         </div>

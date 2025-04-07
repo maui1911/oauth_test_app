@@ -2,12 +2,6 @@ services:
   oauth-test-app:
     build:
       context: .
-      args:
-        - VITE_OAUTH_BASE_URL=${VITE_OAUTH_BASE_URL}
-        - VITE_OAUTH_CLIENT_ID=${VITE_OAUTH_CLIENT_ID}
-        - VITE_OAUTH_CLIENT_SECRET=${VITE_OAUTH_CLIENT_SECRET}
-        - VITE_OAUTH_REDIRECT_URI=${VITE_OAUTH_REDIRECT_URI}
-        - VITE_OAUTH_PROTECTED_RESOURCE=${VITE_OAUTH_PROTECTED_RESOURCE}
     ports:
       - "3000:80"
     restart: unless-stopped 

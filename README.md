@@ -7,7 +7,7 @@ A modern React application for testing OAuth 2.1 flows, built with TypeScript an
 - 🔐 Support for OAuth 2.1 flows:
   - Authorization Code Flow with PKCE
   - Client Credentials Flow
-- 🛠️ Configurable OAuth settings
+- 🛠️ Configurable OAuth settings through web UI
 - 💾 Token persistence
 - 🔄 Automatic token refresh
 - 🎨 Modern UI with Tailwind CSS
@@ -27,34 +27,12 @@ A modern React application for testing OAuth 2.1 flows, built with TypeScript an
    cd oauth-test
    ```
 
-2. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Edit the `.env` file with your OAuth configuration:
-   ```env
-   # OAuth Configuration
-   VITE_OAUTH_BASE_URL=https://your-oauth-server.com
-   VITE_OAUTH_CLIENT_ID=your_client_id
-   VITE_OAUTH_CLIENT_SECRET=your_client_secret
-   VITE_OAUTH_REDIRECT_URI=http://localhost:3000/callback
-   VITE_OAUTH_PROTECTED_RESOURCE=https://your-oauth-server.com/api/resource
-   ```
-
-   Required Environment Variables:
-   - `VITE_OAUTH_BASE_URL`: The base URL of your OAuth server
-   - `VITE_OAUTH_CLIENT_ID`: Your OAuth client ID
-   - `VITE_OAUTH_CLIENT_SECRET`: Your OAuth client secret
-   - `VITE_OAUTH_REDIRECT_URI`: The callback URL for the Authorization Code flow (default: http://localhost:3000/callback)
-   - `VITE_OAUTH_PROTECTED_RESOURCE`: The URL of your protected resource endpoint
-
-3. Install dependencies:
+2. Install dependencies:
    ```bash
    npm install
    ```
 
-4. Start the development server:
+3. Start the development server:
    ```bash
    npm run dev
    ```
@@ -63,26 +41,34 @@ The application will be available at `http://localhost:3000`.
 
 ## Docker Deployment
 
-1. Make sure you have created and configured the `.env` file as described above.
+Build and run with Docker Compose:
+```bash
+docker compose up --build
+```
 
-2. Build and run with Docker Compose:
-   ```bash
-   docker compose up --build
-   ```
-
-   Or build and run manually:
-   ```bash
-   docker build -t oauth-test-app .
-   docker run -p 3000:80 oauth-test-app
-   ```
+Or build and run manually:
+```bash
+docker build -t oauth-test-app .
+docker run -p 3000:80 oauth-test-app
+```
 
 ## Configuration
 
-The application allows you to configure OAuth settings through:
-1. Environment variables (recommended for deployment)
-2. UI settings panel (useful for testing different configurations)
+The application allows you to configure OAuth settings through the web UI. All settings are persisted in localStorage and include:
 
-All settings are persisted in localStorage when changed through the UI.
+- Base URL: The base URL of your OAuth server
+- Client ID: Your OAuth client ID
+- Client Secret: Your OAuth client secret
+- Redirect URI: The callback URL for the Authorization Code flow
+- Protected Resource: The URL of your protected resource endpoint
+- Scope: The OAuth scope (default: "openid profile email")
+
+To configure your OAuth settings:
+1. Click the "Edit Settings" button in the OAuth Settings panel
+2. Enter your OAuth configuration details
+3. Click "Save Changes" to apply the settings
+
+You can also reset to default settings using the "Reset to Default" button.
 
 ## Development
 
