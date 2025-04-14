@@ -4,12 +4,15 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { OAuthService } from './services/oauthService'
 import { Callback } from './components/Callback'
 import { OAuthSettings } from './components/OAuthSettings'
+import { ConnectorManager } from './components/ConnectorManager'
+import { PerformanceTester } from './components/PerformanceTester'
 
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
 }
 
 function MainContent() {
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedFlow, setSelectedFlow] = useState<'authorization_code' | 'client_credentials'>('authorization_code')
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [refreshToken, setRefreshToken] = useState<string | null>(null)
@@ -84,8 +87,8 @@ function MainContent() {
 
             <OAuthSettings onSettingsChange={handleSettingsChange} />
             
-            <Tab.Group selectedIndex={selectedFlow === 'authorization_code' ? 0 : 1} onChange={(index) => setSelectedFlow(index === 0 ? 'authorization_code' : 'client_credentials')}>
-              <Tab.List className="flex space-x-1 rounded-xl bg-blue-900/20 p-1">
+            <Tab.Group selectedIndex={selectedIndex} onChange={setSelectedIndex}>
+              <Tab.List className="flex space-x-1 rounded-xl bg-blue-900/20 p-1 mb-6">
                 <Tab
                   className={({ selected }) =>
                     classNames(
@@ -97,7 +100,7 @@ function MainContent() {
                     )
                   }
                 >
-                  Authorization Code Flow
+                  OAuth Flows
                 </Tab>
                 <Tab
                   className={({ selected }) =>
@@ -110,88 +113,148 @@ function MainContent() {
                     )
                   }
                 >
-                  Client Credentials Flow
+                  API Connectors
+                </Tab>
+                <Tab
+                  className={({ selected }) =>
+                    classNames(
+                      'w-full rounded-lg py-2.5 text-sm font-medium leading-5',
+                      'ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2',
+                      selected
+                        ? 'bg-white text-blue-700 shadow'
+                        : 'text-blue-100 hover:bg-white/[0.12] hover:text-white'
+                    )
+                  }
+                >
+                  Performance Testing
                 </Tab>
               </Tab.List>
+              <Tab.Panels>
+                <Tab.Panel>
+                  {/* OAuth Flows Tab */}
+                  <Tab.Group selectedIndex={selectedFlow === 'authorization_code' ? 0 : 1} onChange={(index) => setSelectedFlow(index === 0 ? 'authorization_code' : 'client_credentials')}>
+                    <Tab.List className="flex space-x-1 rounded-xl bg-blue-900/20 p-1">
+                      <Tab
+                        className={({ selected }) =>
+                          classNames(
+                            'w-full rounded-lg py-2.5 text-sm font-medium leading-5',
+                            'ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2',
+                            selected
+                              ? 'bg-white text-blue-700 shadow'
+                              : 'text-blue-100 hover:bg-white/[0.12] hover:text-white'
+                          )
+                        }
+                      >
+                        Authorization Code Flow
+                      </Tab>
+                      <Tab
+                        className={({ selected }) =>
+                          classNames(
+                            'w-full rounded-lg py-2.5 text-sm font-medium leading-5',
+                            'ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2',
+                            selected
+                              ? 'bg-white text-blue-700 shadow'
+                              : 'text-blue-100 hover:bg-white/[0.12] hover:text-white'
+                          )
+                        }
+                      >
+                        Client Credentials Flow
+                      </Tab>
+                    </Tab.List>
+                  </Tab.Group>
+
+                  <div className="mt-6">
+                    {error && (
+                      <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-md">
+                        {error}
+                      </div>
+                    )}
+
+                    {selectedFlow === 'authorization_code' ? (
+                      <div>
+                        <h2 className="text-lg font-medium text-gray-900 mb-4">Authorization Code Flow</h2>
+                        <div className="space-y-4">
+                          <button
+                            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                            onClick={handleAuthorizationCodeFlow}
+                          >
+                            Start Authorization Code Flow
+                          </button>
+                          {accessToken && (
+                            <div className="mt-4">
+                              <h3 className="text-sm font-medium text-gray-700">Access Token:</h3>
+                              <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
+                                {accessToken}
+                              </pre>
+                            </div>
+                          )}
+                          {refreshToken && (
+                            <div className="mt-4">
+                              <h3 className="text-sm font-medium text-gray-700">Refresh Token:</h3>
+                              <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
+                                {refreshToken}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <h2 className="text-lg font-medium text-gray-900 mb-4">Client Credentials Flow</h2>
+                        <div className="space-y-4">
+                          <button
+                            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                            onClick={handleClientCredentialsFlow}
+                          >
+                            Start Client Credentials Flow
+                          </button>
+                          {accessToken && (
+                            <div className="mt-4">
+                              <h3 className="text-sm font-medium text-gray-700">Access Token:</h3>
+                              <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
+                                {accessToken}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {accessToken && (
+                      <div className="mt-6">
+                        <h2 className="text-lg font-medium text-gray-900 mb-4">Protected Resource</h2>
+                        <button
+                          className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                          onClick={handleGetProtectedResource}
+                        >
+                          Get Protected Resource
+                        </button>
+                        {protectedResourceData && (
+                          <div className="mt-4">
+                            <h3 className="text-sm font-medium text-gray-700">Response:</h3>
+                            <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-96">
+                              {JSON.stringify(protectedResourceData, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </Tab.Panel>
+                <Tab.Panel>
+                  {/* API Connectors Tab */}
+                  <div className="mt-4">
+                    <ConnectorManager />
+                  </div>
+                </Tab.Panel>
+                <Tab.Panel>
+                  {/* Performance Testing Tab */}
+                  <div className="mt-4">
+                    <PerformanceTester />
+                  </div>
+                </Tab.Panel>
+              </Tab.Panels>
             </Tab.Group>
-
-            <div className="mt-6">
-              {error && (
-                <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-md">
-                  {error}
-                </div>
-              )}
-
-              {selectedFlow === 'authorization_code' ? (
-                <div>
-                  <h2 className="text-lg font-medium text-gray-900 mb-4">Authorization Code Flow</h2>
-                  <div className="space-y-4">
-                    <button
-                      className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-                      onClick={handleAuthorizationCodeFlow}
-                    >
-                      Start Authorization Code Flow
-                    </button>
-                    {accessToken && (
-                      <div className="mt-4">
-                        <h3 className="text-sm font-medium text-gray-700">Access Token:</h3>
-                        <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
-                          {accessToken}
-                        </pre>
-                      </div>
-                    )}
-                    {refreshToken && (
-                      <div className="mt-4">
-                        <h3 className="text-sm font-medium text-gray-700">Refresh Token:</h3>
-                        <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
-                          {refreshToken}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <h2 className="text-lg font-medium text-gray-900 mb-4">Client Credentials Flow</h2>
-                  <div className="space-y-4">
-                    <button
-                      className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-                      onClick={handleClientCredentialsFlow}
-                    >
-                      Start Client Credentials Flow
-                    </button>
-                    {accessToken && (
-                      <div className="mt-4">
-                        <h3 className="text-sm font-medium text-gray-700">Access Token:</h3>
-                        <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
-                          {accessToken}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {accessToken && (
-                <div className="mt-6">
-                  <h2 className="text-lg font-medium text-gray-900 mb-4">Protected Resource</h2>
-                  <button
-                    className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-                    onClick={handleGetProtectedResource}
-                  >
-                    Get Protected Resource
-                  </button>
-                  {protectedResourceData && (
-                    <div className="mt-4">
-                      <h3 className="text-sm font-medium text-gray-700">Response:</h3>
-                      <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-96">
-                        {JSON.stringify(protectedResourceData, null, 2)}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
@@ -210,4 +273,4 @@ function App() {
   )
 }
 
-export default App 
+export default App
