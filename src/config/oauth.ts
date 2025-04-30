@@ -19,8 +19,8 @@ const DEFAULT_SETTINGS: OAuthSettings = {
   protectedResource: "https://your-oauth-server.com/api/resource",
   scope: "openid profile email",
   endpoints: {
-    authorize: "/connect/authorize",
-    token: "/connect/token",
+    authorize: "/oauth/authorize",
+    token: "/oauth/token",
   },
 };
 
