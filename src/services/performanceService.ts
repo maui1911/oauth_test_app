@@ -129,10 +129,13 @@ export class PerformanceService {
     try {
       const startTime = performance.now();
       
-      const response = await fetch(connector.url, {
+      const response = await fetch('/api/proxy', {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`
-        }
+        },
+        body: JSON.stringify({ url: connector.url })
       });
       
       const endTime = performance.now();

@@ -9,8 +9,9 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        // Do not rewrite the path, keep /api prefix so it matches backend and Docker nginx config
+        // rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
   }
-}) 
+})

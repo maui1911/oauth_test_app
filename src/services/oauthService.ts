@@ -75,21 +75,21 @@ export class OAuthService {
     }
 
     const settings = getOAuthSettings();
-    const params = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      client_id: settings.clientId,
-      client_secret: settings.clientSecret,
-      redirect_uri: settings.redirectUri,
-      code_verifier: this.codeVerifier,
-    });
-
-    const response = await fetch(`${settings.baseUrl}${settings.endpoints.token}`, {
+    const response = await fetch('/api/oauth/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
       },
-      body: params.toString(),
+      body: JSON.stringify({
+        tokenUrl: `${settings.baseUrl}${settings.endpoints.token}`,
+        clientId: settings.clientId,
+        clientSecret: settings.clientSecret,
+        code,
+        redirectUri: settings.redirectUri,
+        codeVerifier: this.codeVerifier,
+        grantType: 'authorization_code',
+        scope: settings.scope,
+      }),
     });
 
     if (!response.ok) {
@@ -104,19 +104,18 @@ export class OAuthService {
 
   public async getClientCredentialsToken(): Promise<TokenResponse> {
     const settings = getOAuthSettings();
-    const params = new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: settings.clientId,
-      client_secret: settings.clientSecret,
-      scope: settings.scope,
-    });
-
-    const response = await fetch(`${settings.baseUrl}${settings.endpoints.token}`, {
+    const response = await fetch('/api/oauth/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
       },
-      body: params.toString(),
+      body: JSON.stringify({
+        tokenUrl: `${settings.baseUrl}${settings.endpoints.token}`,
+        clientId: settings.clientId,
+        clientSecret: settings.clientSecret,
+        grantType: 'client_credentials',
+        scope: settings.scope,
+      }),
     });
 
     if (!response.ok) {
@@ -164,22 +163,57 @@ export class OAuthService {
     }
 
     const settings = getOAuthSettings();
-    const response = await fetch(settings.protectedResource, {
-      headers: {
-        'Authorization': `Bearer ${this.accessToken}`,
-      },
-    });
+    console.log('Requesting protected resource:', settings.protectedResource);
+    
+    try {
+      const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.accessToken}`,
+        },
+        body: JSON.stringify({ url: settings.protectedResource }),
+      });
 
-    if (!response.ok) {
-      if (response.status === 401 && this.refreshToken) {
-        // Token expired, try to refresh
-        await this.refreshAccessToken();
-        return this.getProtectedResource();
+      console.log('Protected resource response status:', response.status);
+      
+      if (!response.ok) {
+        if (response.status === 401 && this.refreshToken) {
+          console.log('Access token expired, refreshing...');
+          await this.refreshAccessToken();
+          return this.getProtectedResource();
+        }
+        
+        const errorData = await response.text();
+        console.error('Protected resource error:', errorData);
+        
+        try {
+          // Try to parse as JSON if possible
+          const jsonError = JSON.parse(errorData);
+          throw new Error(`Failed to get protected resource: ${jsonError.error || 'Unknown error'}`);
+        } catch (e) {
+          // If parsing fails, use the text response
+          throw new Error(`Failed to get protected resource: ${errorData || response.statusText}`);
+        }
       }
-      throw new Error('Failed to get protected resource');
-    }
 
-    return response.json();
+      // Handle different response types
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return response.json();
+      } else {
+        const text = await response.text();
+        console.log('Non-JSON response received, trying to parse...');
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          return { text };
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching protected resource:', error);
+      throw error;
+    }
   }
 
   private setTokens(data: TokenResponse): void {
@@ -229,4 +263,4 @@ function base64URLEncode(buffer: Uint8Array): string {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=/g, '');
-} 
+}

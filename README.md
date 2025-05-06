@@ -11,13 +11,11 @@ A modern React application for testing OAuth 2.1 flows, built with TypeScript an
 - 💾 Token persistence
 - 🔄 Automatic token refresh
 - 🎨 Modern UI with Tailwind CSS
-- 🐳 Docker support
 
 ## Prerequisites
 
 - Node.js >= 18.0.0
 - npm or yarn
-- Docker (optional, for containerized deployment)
 
 ## Installation
 
@@ -32,25 +30,29 @@ A modern React application for testing OAuth 2.1 flows, built with TypeScript an
    npm install
    ```
 
-3. Start the development server:
+3. Start the backend OAuth proxy server:
+   ```bash
+   node server/server.cjs
+   ```
+   This will start the backend on `http://localhost:8080`.
+
+4. In a separate terminal, start the frontend development server:
    ```bash
    npm run dev
    ```
+   The application will be available at `http://localhost:3000`.
 
-The application will be available at `http://localhost:3000`.
+## How it works
 
-## Docker Deployment
+- The frontend (React/Vite) runs on port 3000.
+- The backend Node.js proxy (server/server.cjs) runs on port 8080 and handles all OAuth token exchanges, avoiding CORS issues and keeping credentials secure.
+- The Vite dev server proxies all `/api` requests to the backend.
+- For production, you should set up a reverse proxy (e.g., Nginx) to forward `/api` requests to the backend server.
 
-Build and run with Docker Compose:
-```bash
-docker compose up --build
-```
+## Debugging
 
-Or build and run manually:
-```bash
-docker build -t oauth-test-app .
-docker run -p 3000:80 oauth-test-app
-```
+- The backend server logs all incoming requests, OAuth server responses, and errors to the console for easier debugging.
+- If you encounter SSL certificate issues with self-signed certificates, SSL verification is disabled for development in `server/server.cjs`.
 
 ## Configuration
 
@@ -79,15 +81,14 @@ You can also reset to default settings using the "Reset to Default" button.
 ## Project Structure
 
 ```
-├── src/
-│   ├── components/     # React components
-│   ├── services/      # OAuth service implementation
-│   ├── config/        # Configuration files
-│   └── App.tsx        # Main application component
-├── public/           # Static files
-├── Dockerfile        # Docker configuration
-├── nginx.conf        # Nginx configuration for production
-└── docker-compose.yml # Docker Compose configuration
+├── server/                # Backend Node.js proxy
+│   └── server.cjs
+├── src/                   # Frontend React app
+│   ├── components/
+│   ├── config/
+│   ├── services/
+│   └── ...
+└── public/                # Static files
 ```
 
 ## Contributing
@@ -100,4 +101,4 @@ You can also reset to default settings using the "Reset to Default" button.
 
 ## License
 
-This project is licensed under the ISC License - see the LICENSE file for details. 
+This project is licensed under the ISC License - see the LICENSE file for details.

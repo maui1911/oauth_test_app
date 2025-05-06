@@ -1,7 +1,0 @@
-services:
-  oauth-test-app:
-    build:
-      context: .
-    ports:
-      - "3000:80"
-    restart: unless-stopped 
