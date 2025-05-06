@@ -22,7 +22,7 @@ A modern React application for testing OAuth 2.1 flows, built with TypeScript an
 1. Clone the repository:
    ```bash
    git clone https://github.com/maui1911/oauth_test_app.git
-   cd oauth-test
+   cd oauth_test_app
    ```
 
 2. Install dependencies:
