@@ -66,6 +66,7 @@ export class OAuthService {
 
   public async exchangeCodeForTokens(code: string, state: string): Promise<TokenResponse> {
     // Verify state matches
+
     if (state !== this.state) {
       throw new Error('Invalid state parameter');
     }
