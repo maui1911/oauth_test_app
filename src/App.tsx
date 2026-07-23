@@ -6,6 +6,8 @@ import { Callback } from './components/Callback'
 import { OAuthSettings } from './components/OAuthSettings'
 import { ConnectorManager } from './components/ConnectorManager'
 import { PerformanceTester } from './components/PerformanceTester'
+import { DPoPService } from './services/dpopService'
+import { getOAuthSettings } from './config/oauth'
 
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
@@ -18,12 +20,18 @@ function MainContent() {
   const [refreshToken, setRefreshToken] = useState<string | null>(null)
   const [protectedResourceData, setProtectedResourceData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [tokenType, setTokenType] = useState<string | null>(null)
+  const [dpopThumbprint, setDpopThumbprint] = useState<string | null>(null)
   const oauthService = OAuthService.getInstance()
 
   useEffect(() => {
     // Load tokens from localStorage on component mount
     setAccessToken(oauthService.getAccessToken())
     setRefreshToken(oauthService.getRefreshToken())
+    setTokenType(oauthService.getTokenType())
+    if (getOAuthSettings().dpopEnabled) {
+      DPoPService.getInstance().getThumbprint().then(setDpopThumbprint).catch(() => {})
+    }
   }, [])
 
   const handleAuthorizationCodeFlow = async () => {
@@ -41,6 +49,7 @@ function MainContent() {
       setError(null)
       const response = await oauthService.getClientCredentialsToken()
       setAccessToken(response.access_token)
+      setTokenType(oauthService.getTokenType())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get client credentials token')
     }
@@ -61,6 +70,7 @@ function MainContent() {
     setAccessToken(null)
     setRefreshToken(null)
     setProtectedResourceData(null)
+    setTokenType(null)
   }
 
   const handleSettingsChange = () => {
@@ -182,6 +192,12 @@ function MainContent() {
                           </button>
                           {accessToken && (
                             <div className="mt-4">
+                              <p className="text-xs text-gray-500 mb-1">
+                                Token type: <span className="font-semibold">{tokenType || 'Bearer'}</span>
+                                {tokenType === 'DPoP' && dpopThumbprint && (
+                                  <span> · jkt: <span className="font-mono">{dpopThumbprint}</span></span>
+                                )}
+                              </p>
                               <h3 className="text-sm font-medium text-gray-700">Access Token:</h3>
                               <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
                                 {accessToken}
@@ -210,6 +226,12 @@ function MainContent() {
                           </button>
                           {accessToken && (
                             <div className="mt-4">
+                              <p className="text-xs text-gray-500 mb-1">
+                                Token type: <span className="font-semibold">{tokenType || 'Bearer'}</span>
+                                {tokenType === 'DPoP' && dpopThumbprint && (
+                                  <span> · jkt: <span className="font-mono">{dpopThumbprint}</span></span>
+                                )}
+                              </p>
                               <h3 className="text-sm font-medium text-gray-700">Access Token:</h3>
                               <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
                                 {accessToken}
