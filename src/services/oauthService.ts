@@ -195,7 +195,7 @@ export class OAuthService {
     return response;
   }
 
-  public async getProtectedResource(): Promise<any> {
+  public async getProtectedResource(retryOnAuthFailure: boolean = true): Promise<any> {
     if (!this.accessToken) {
       throw new Error('No access token available');
     }
@@ -207,10 +207,11 @@ export class OAuthService {
       console.log('Protected resource response status:', response.status);
 
       if (!response.ok) {
-        if (response.status === 401 && this.refreshToken) {
+        if (response.status === 401 && this.refreshToken && retryOnAuthFailure) {
           console.log('Access token expired, refreshing...');
           await this.refreshAccessToken();
-          return this.getProtectedResource();
+          // Retry once; pass false to avoid an infinite refresh/retry loop on persistent 401s.
+          return this.getProtectedResource(false);
         }
         const errorData = await response.text();
         console.error('Protected resource error:', errorData);
