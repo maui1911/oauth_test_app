@@ -19,7 +19,7 @@ function decodeBase64Url(part: string): any {
   return JSON.parse(atob(b64 + pad))
 }
 
-function decodeDpopProof(token: string): { header: any; payload: any } | null {
+function decodeJwt(token: string): { header: any; payload: any } | null {
   try {
     const [header, payload] = token.split('.')
     return { header: decodeBase64Url(header), payload: decodeBase64Url(payload) }
@@ -223,6 +223,21 @@ function MainContent() {
                               <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
                                 {accessToken}
                               </pre>
+                              {(() => {
+                                const decoded = decodeJwt(accessToken)
+                                return decoded ? (
+                                  <div className="mt-2">
+                                    <h4 className="text-xs font-medium text-gray-500">Decoded header:</h4>
+                                    <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                                      {JSON.stringify(decoded.header, null, 2)}
+                                    </pre>
+                                    <h4 className="text-xs font-medium text-gray-500 mt-2">Decoded payload:</h4>
+                                    <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                                      {JSON.stringify(decoded.payload, null, 2)}
+                                    </pre>
+                                  </div>
+                                ) : null
+                              })()}
                             </div>
                           )}
                           {refreshToken && (
@@ -257,6 +272,21 @@ function MainContent() {
                               <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
                                 {accessToken}
                               </pre>
+                              {(() => {
+                                const decoded = decodeJwt(accessToken)
+                                return decoded ? (
+                                  <div className="mt-2">
+                                    <h4 className="text-xs font-medium text-gray-500">Decoded header:</h4>
+                                    <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                                      {JSON.stringify(decoded.header, null, 2)}
+                                    </pre>
+                                    <h4 className="text-xs font-medium text-gray-500 mt-2">Decoded payload:</h4>
+                                    <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                                      {JSON.stringify(decoded.payload, null, 2)}
+                                    </pre>
+                                  </div>
+                                ) : null
+                              })()}
                             </div>
                           )}
                         </div>
@@ -287,7 +317,7 @@ function MainContent() {
                               {dpopProof}
                             </pre>
                             {(() => {
-                              const decoded = decodeDpopProof(dpopProof)
+                              const decoded = decodeJwt(dpopProof)
                               return decoded ? (
                                 <div className="mt-2">
                                   <h4 className="text-xs font-medium text-gray-500">Decoded header:</h4>
