@@ -14,8 +14,11 @@ app.use(bodyParser.json());
 
 // Proxy endpoint for OAuth token exchange
 app.post('/api/oauth/token', async (req, res) => {
-  console.log('Received /api/oauth/token request:', req.body); // Log request body
-  const { tokenUrl, clientId, clientSecret, code, redirectUri, codeVerifier, grantType, scope } = req.body;
+  console.log('Received /api/oauth/token request:', req.body);
+  const {
+    tokenUrl, clientId, clientSecret, code, redirectUri,
+    codeVerifier, grantType, scope, refreshToken, dpopProof
+  } = req.body;
   try {
     const params = new URLSearchParams();
     params.append('client_id', clientId);
@@ -27,26 +30,43 @@ app.post('/api/oauth/token', async (req, res) => {
       if (codeVerifier) params.append('code_verifier', codeVerifier);
     } else if (grantType === 'client_credentials') {
       if (scope) params.append('scope', scope);
+    } else if (grantType === 'refresh_token') {
+      params.append('refresh_token', refreshToken);
     }
-    const response = await axios.post(tokenUrl, params, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    });
-    console.log('OAuth server response:', response.data); // Log OAuth server response
+
+    const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+    if (dpopProof) headers['DPoP'] = dpopProof;
+
+    const response = await axios.post(tokenUrl, params, { headers });
+    console.log('OAuth server response:', response.data);
+    const nonce = response.headers['dpop-nonce'];
+    if (nonce) res.set('DPoP-Nonce', nonce);
     res.json(response.data);
   } catch (error) {
-    console.error('Error in /api/oauth/token:', error.response?.data || error.message); // Log error details
-    res.status(error.response?.status || 500).json({ error: error.message, details: error.response?.data });
+    const nonce = error.response?.headers?.['dpop-nonce'];
+    console.error('Error in /api/oauth/token:', error.response?.data || error.message);
+    if (nonce) res.set('DPoP-Nonce', nonce);
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data?.error || error.message,
+      details: error.response?.data,
+      dpopNonce: nonce,
+    });
   }
 });
 
 // Proxy endpoint for connector calls
 app.post('/api/proxy', async (req, res) => {
-  const { url } = req.body;
+  const { url, method, dpopProof } = req.body;
   const authHeader = req.headers['authorization'];
   console.log('Proxying connector call to:', url);
   try {
-    const response = await axios.get(url, {
-      headers: authHeader ? { Authorization: authHeader } : {},
+    const outgoingHeaders = {};
+    if (authHeader) outgoingHeaders['Authorization'] = authHeader;
+    if (dpopProof) outgoingHeaders['DPoP'] = dpopProof;
+    const response = await axios({
+      method: method || 'GET',
+      url,
+      headers: outgoingHeaders,
       validateStatus: () => true, // Forward all responses
       responseType: 'json' // Ensure JSON response type
     });

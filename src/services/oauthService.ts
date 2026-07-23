@@ -1,4 +1,5 @@
 import { getOAuthSettings } from '../config/oauth';
+import { DPoPService } from './dpopService';
 
 interface TokenResponse {
   access_token: string;
@@ -14,6 +15,8 @@ export class OAuthService {
   private refreshToken: string | null = null;
   private codeVerifier: string | null = null;
   private state: string | null = null;
+  private tokenType: string | null = null;
+  private dpop = DPoPService.getInstance();
 
   private constructor() {
     // Load tokens from localStorage on initialization
@@ -21,6 +24,7 @@ export class OAuthService {
     this.refreshToken = localStorage.getItem('refresh_token');
     this.codeVerifier = localStorage.getItem('code_verifier');
     this.state = localStorage.getItem('oauth_state');
+    this.tokenType = localStorage.getItem('token_type');
   }
 
   public static getInstance(): OAuthService {
@@ -61,150 +65,169 @@ export class OAuthService {
       code_challenge_method: 'S256',
     });
 
+    if (settings.dpopEnabled) {
+      const jkt = await this.dpop.getThumbprint();
+      params.append('dpop_jkt', jkt);
+    }
+
     return `${settings.baseUrl}${settings.endpoints.authorize}?${params.toString()}`;
   }
 
-  public async exchangeCodeForTokens(code: string, state: string): Promise<TokenResponse> {
-    // Verify state matches
+  private async requestToken(
+    bodyParams: Record<string, unknown>
+  ): Promise<TokenResponse> {
+    const settings = getOAuthSettings();
+    const tokenUrl = `${settings.baseUrl}${settings.endpoints.token}`;
 
+    const doRequest = async (nonce?: string) => {
+      let dpopProof: string | undefined;
+      if (settings.dpopEnabled) {
+        dpopProof = await this.dpop.createProof({
+          htu: tokenUrl,
+          htm: 'POST',
+          nonce,
+        });
+      }
+      const response = await fetch('/api/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tokenUrl, ...bodyParams, dpopProof }),
+      });
+      const data = await response.json();
+      return { response, data };
+    };
+
+    let { response, data } = await doRequest();
+    // DPoP-Nonce challenge: AS answers with error + nonce; retry once with nonce.
+    if (settings.dpopEnabled && !response.ok && data?.dpopNonce) {
+      ({ response, data } = await doRequest(data.dpopNonce));
+    }
+    if (!response.ok) {
+      throw new Error(data?.error || 'Token request failed');
+    }
+    this.setTokens(data);
+    return data;
+  }
+
+  public async exchangeCodeForTokens(code: string, state: string): Promise<TokenResponse> {
     if (state !== this.state) {
       throw new Error('Invalid state parameter');
     }
-
     if (!this.codeVerifier) {
       throw new Error('Code verifier not found. Please start the authorization flow again.');
     }
-
     const settings = getOAuthSettings();
-    const response = await fetch('/api/oauth/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        tokenUrl: `${settings.baseUrl}${settings.endpoints.token}`,
-        clientId: settings.clientId,
-        clientSecret: settings.clientSecret,
-        code,
-        redirectUri: settings.redirectUri,
-        codeVerifier: this.codeVerifier,
-        grantType: 'authorization_code',
-        scope: settings.scope,
-      }),
+    const data = await this.requestToken({
+      clientId: settings.clientId,
+      clientSecret: settings.clientSecret,
+      code,
+      redirectUri: settings.redirectUri,
+      codeVerifier: this.codeVerifier,
+      grantType: 'authorization_code',
+      scope: settings.scope,
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to exchange code for tokens');
-    }
-
-    const data = await response.json();
-    this.setTokens(data);
-    this.clearAuthData(); // Clear code verifier and state after successful exchange
+    this.clearAuthData();
     return data;
   }
 
   public async getClientCredentialsToken(): Promise<TokenResponse> {
     const settings = getOAuthSettings();
-    const response = await fetch('/api/oauth/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        tokenUrl: `${settings.baseUrl}${settings.endpoints.token}`,
-        clientId: settings.clientId,
-        clientSecret: settings.clientSecret,
-        grantType: 'client_credentials',
-        scope: settings.scope,
-      }),
+    return this.requestToken({
+      clientId: settings.clientId,
+      clientSecret: settings.clientSecret,
+      grantType: 'client_credentials',
+      scope: settings.scope,
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to get client credentials token');
-    }
-
-    const data = await response.json();
-    this.setTokens(data);
-    return data;
   }
 
   public async refreshAccessToken(): Promise<TokenResponse> {
     if (!this.refreshToken) {
       throw new Error('No refresh token available');
     }
-
     const settings = getOAuthSettings();
-    const params = new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: this.refreshToken,
-      client_id: settings.clientId,
-      client_secret: settings.clientSecret,
+    return this.requestToken({
+      clientId: settings.clientId,
+      clientSecret: settings.clientSecret,
+      grantType: 'refresh_token',
+      refreshToken: this.refreshToken,
     });
-
-    const response = await fetch(`${settings.baseUrl}${settings.endpoints.token}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params.toString(),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to refresh token');
-    }
-
-    const data = await response.json();
-    this.setTokens(data);
-    return data;
   }
 
-  public async getProtectedResource(): Promise<any> {
+  /**
+   * Calls a protected URL through the proxy using DPoP (when enabled) or Bearer.
+   * Handles a single DPoP-Nonce retry on 401. Returns the raw proxy Response.
+   */
+  public async fetchResource(url: string, method: string = 'GET'): Promise<Response> {
     if (!this.accessToken) {
       throw new Error('No access token available');
     }
+    const settings = getOAuthSettings();
 
+    const doRequest = async (nonce?: string): Promise<Response> => {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const body: Record<string, unknown> = { url, method };
+      if (settings.dpopEnabled) {
+        const proof = await this.dpop.createProof({
+          htu: url,
+          htm: method,
+          nonce,
+          accessToken: this.accessToken!,
+        });
+        headers['Authorization'] = `DPoP ${this.accessToken}`;
+        body.dpopProof = proof;
+      } else {
+        headers['Authorization'] = `Bearer ${this.accessToken}`;
+      }
+      return fetch('/api/proxy', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+    };
+
+    let response = await doRequest();
+    if (settings.dpopEnabled && response.status === 401) {
+      const nonce = response.headers.get('dpop-nonce');
+      if (nonce) {
+        response = await doRequest(nonce);
+      }
+    }
+    return response;
+  }
+
+  public async getProtectedResource(retryOnAuthFailure: boolean = true): Promise<any> {
+    if (!this.accessToken) {
+      throw new Error('No access token available');
+    }
     const settings = getOAuthSettings();
     console.log('Requesting protected resource:', settings.protectedResource);
-    
-    try {
-      const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.accessToken}`,
-        },
-        body: JSON.stringify({ url: settings.protectedResource }),
-      });
 
+    try {
+      const response = await this.fetchResource(settings.protectedResource, 'GET');
       console.log('Protected resource response status:', response.status);
-      
+
       if (!response.ok) {
-        if (response.status === 401 && this.refreshToken) {
+        if (response.status === 401 && this.refreshToken && retryOnAuthFailure) {
           console.log('Access token expired, refreshing...');
           await this.refreshAccessToken();
-          return this.getProtectedResource();
+          // Retry once; pass false to avoid an infinite refresh/retry loop on persistent 401s.
+          return this.getProtectedResource(false);
         }
-        
         const errorData = await response.text();
         console.error('Protected resource error:', errorData);
-        
         try {
-          // Try to parse as JSON if possible
           const jsonError = JSON.parse(errorData);
           throw new Error(`Failed to get protected resource: ${jsonError.error || 'Unknown error'}`);
         } catch (e) {
-          // If parsing fails, use the text response
           throw new Error(`Failed to get protected resource: ${errorData || response.statusText}`);
         }
       }
 
-      // Handle different response types
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         return response.json();
       } else {
         const text = await response.text();
-        console.log('Non-JSON response received, trying to parse...');
         try {
           return JSON.parse(text);
         } catch (e) {
@@ -222,12 +245,13 @@ export class OAuthService {
     if (data.refresh_token) {
       this.refreshToken = data.refresh_token;
     }
+    this.tokenType = data.token_type || (getOAuthSettings().dpopEnabled ? 'DPoP' : 'Bearer');
 
-    // Store tokens in localStorage
     localStorage.setItem('access_token', data.access_token);
     if (data.refresh_token) {
       localStorage.setItem('refresh_token', data.refresh_token);
     }
+    localStorage.setItem('token_type', this.tokenType);
   }
 
   private generateState(): string {
@@ -236,6 +260,10 @@ export class OAuthService {
 
   public getAccessToken(): string | null {
     return this.accessToken;
+  }
+
+  public getTokenType(): string | null {
+    return this.tokenType;
   }
 
   public getRefreshToken(): string | null {
@@ -252,9 +280,11 @@ export class OAuthService {
   public clearTokens(): void {
     this.accessToken = null;
     this.refreshToken = null;
+    this.tokenType = null;
     this.clearAuthData();
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    localStorage.removeItem('token_type');
   }
 }
 
