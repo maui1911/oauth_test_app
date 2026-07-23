@@ -50,6 +50,9 @@ function MainContent() {
       const response = await oauthService.getClientCredentialsToken()
       setAccessToken(response.access_token)
       setTokenType(oauthService.getTokenType())
+      if (getOAuthSettings().dpopEnabled) {
+        DPoPService.getInstance().getThumbprint().then(setDpopThumbprint).catch(() => {})
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get client credentials token')
     }
@@ -194,7 +197,7 @@ function MainContent() {
                             <div className="mt-4">
                               <p className="text-xs text-gray-500 mb-1">
                                 Token type: <span className="font-semibold">{tokenType || 'Bearer'}</span>
-                                {tokenType === 'DPoP' && dpopThumbprint && (
+                                {tokenType?.toUpperCase() === 'DPOP' && dpopThumbprint && (
                                   <span> · jkt: <span className="font-mono">{dpopThumbprint}</span></span>
                                 )}
                               </p>
@@ -228,7 +231,7 @@ function MainContent() {
                             <div className="mt-4">
                               <p className="text-xs text-gray-500 mb-1">
                                 Token type: <span className="font-semibold">{tokenType || 'Bearer'}</span>
-                                {tokenType === 'DPoP' && dpopThumbprint && (
+                                {tokenType?.toUpperCase() === 'DPOP' && dpopThumbprint && (
                                   <span> · jkt: <span className="font-mono">{dpopThumbprint}</span></span>
                                 )}
                               </p>
