@@ -13,12 +13,28 @@ function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
 }
 
+function decodeBase64Url(part: string): any {
+  const b64 = part.replace(/-/g, '+').replace(/_/g, '/')
+  const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4))
+  return JSON.parse(atob(b64 + pad))
+}
+
+function decodeDpopProof(token: string): { header: any; payload: any } | null {
+  try {
+    const [header, payload] = token.split('.')
+    return { header: decodeBase64Url(header), payload: decodeBase64Url(payload) }
+  } catch {
+    return null
+  }
+}
+
 function MainContent() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedFlow, setSelectedFlow] = useState<'authorization_code' | 'client_credentials'>('authorization_code')
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [refreshToken, setRefreshToken] = useState<string | null>(null)
   const [protectedResourceData, setProtectedResourceData] = useState<any>(null)
+  const [dpopProof, setDpopProof] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tokenType, setTokenType] = useState<string | null>(null)
   const [dpopThumbprint, setDpopThumbprint] = useState<string | null>(null)
@@ -63,6 +79,7 @@ function MainContent() {
       setError(null)
       const data = await oauthService.getProtectedResource()
       setProtectedResourceData(data)
+      setDpopProof(oauthService.getLastDpopProof())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get protected resource')
     }
@@ -73,6 +90,7 @@ function MainContent() {
     setAccessToken(null)
     setRefreshToken(null)
     setProtectedResourceData(null)
+    setDpopProof(null)
     setTokenType(null)
   }
 
@@ -260,6 +278,29 @@ function MainContent() {
                             <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-96">
                               {JSON.stringify(protectedResourceData, null, 2)}
                             </pre>
+                          </div>
+                        )}
+                        {dpopProof && (
+                          <div className="mt-4">
+                            <h3 className="text-sm font-medium text-gray-700">DPoP Proof (sent to resource server):</h3>
+                            <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
+                              {dpopProof}
+                            </pre>
+                            {(() => {
+                              const decoded = decodeDpopProof(dpopProof)
+                              return decoded ? (
+                                <div className="mt-2">
+                                  <h4 className="text-xs font-medium text-gray-500">Decoded header:</h4>
+                                  <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                                    {JSON.stringify(decoded.header, null, 2)}
+                                  </pre>
+                                  <h4 className="text-xs font-medium text-gray-500 mt-2">Decoded payload:</h4>
+                                  <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                                    {JSON.stringify(decoded.payload, null, 2)}
+                                  </pre>
+                                </div>
+                              ) : null
+                            })()}
                           </div>
                         )}
                       </div>
