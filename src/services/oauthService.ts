@@ -153,53 +153,80 @@ export class OAuthService {
     });
   }
 
+  /**
+   * Calls a protected URL through the proxy using DPoP (when enabled) or Bearer.
+   * Handles a single DPoP-Nonce retry on 401. Returns the raw proxy Response.
+   */
+  public async fetchResource(url: string, method: string = 'GET'): Promise<Response> {
+    if (!this.accessToken) {
+      throw new Error('No access token available');
+    }
+    const settings = getOAuthSettings();
+
+    const doRequest = async (nonce?: string): Promise<Response> => {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const body: Record<string, unknown> = { url, method };
+      if (settings.dpopEnabled) {
+        const proof = await this.dpop.createProof({
+          htu: url,
+          htm: method,
+          nonce,
+          accessToken: this.accessToken!,
+        });
+        headers['Authorization'] = `DPoP ${this.accessToken}`;
+        body.dpopProof = proof;
+      } else {
+        headers['Authorization'] = `Bearer ${this.accessToken}`;
+      }
+      return fetch('/api/proxy', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+    };
+
+    let response = await doRequest();
+    if (settings.dpopEnabled && response.status === 401) {
+      const nonce = response.headers.get('dpop-nonce');
+      if (nonce) {
+        response = await doRequest(nonce);
+      }
+    }
+    return response;
+  }
+
   public async getProtectedResource(): Promise<any> {
     if (!this.accessToken) {
       throw new Error('No access token available');
     }
-
     const settings = getOAuthSettings();
     console.log('Requesting protected resource:', settings.protectedResource);
-    
-    try {
-      const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.accessToken}`,
-        },
-        body: JSON.stringify({ url: settings.protectedResource }),
-      });
 
+    try {
+      const response = await this.fetchResource(settings.protectedResource, 'GET');
       console.log('Protected resource response status:', response.status);
-      
+
       if (!response.ok) {
         if (response.status === 401 && this.refreshToken) {
           console.log('Access token expired, refreshing...');
           await this.refreshAccessToken();
           return this.getProtectedResource();
         }
-        
         const errorData = await response.text();
         console.error('Protected resource error:', errorData);
-        
         try {
-          // Try to parse as JSON if possible
           const jsonError = JSON.parse(errorData);
           throw new Error(`Failed to get protected resource: ${jsonError.error || 'Unknown error'}`);
         } catch (e) {
-          // If parsing fails, use the text response
           throw new Error(`Failed to get protected resource: ${errorData || response.statusText}`);
         }
       }
 
-      // Handle different response types
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         return response.json();
       } else {
         const text = await response.text();
-        console.log('Non-JSON response received, trying to parse...');
         try {
           return JSON.parse(text);
         } catch (e) {
