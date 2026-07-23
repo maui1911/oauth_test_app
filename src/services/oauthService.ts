@@ -220,9 +220,10 @@ export class OAuthService {
         console.error('Protected resource error:', errorData);
         try {
           const jsonError = JSON.parse(errorData);
-          throw new Error(`Failed to get protected resource: ${jsonError.error || 'Unknown error'}`);
+          throw new Error(`Failed to get protected resource (HTTP ${response.status}): ${jsonError.error || jsonError.message || errorData || 'Unknown error'}`);
         } catch (e) {
-          throw new Error(`Failed to get protected resource: ${errorData || response.statusText}`);
+          if (e instanceof Error && e.message.startsWith('Failed to get protected resource')) throw e;
+          throw new Error(`Failed to get protected resource (HTTP ${response.status}): ${errorData || response.statusText || 'Unknown error'}`);
         }
       }
 
