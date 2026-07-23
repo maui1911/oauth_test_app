@@ -16,6 +16,7 @@ export class OAuthService {
   private codeVerifier: string | null = null;
   private state: string | null = null;
   private tokenType: string | null = null;
+  private lastDpopProof: string | null = null;
   private dpop = DPoPService.getInstance();
 
   private constructor() {
@@ -175,8 +176,10 @@ export class OAuthService {
         });
         headers['Authorization'] = `DPoP ${this.accessToken}`;
         body.dpopProof = proof;
+        this.lastDpopProof = proof;
       } else {
         headers['Authorization'] = `Bearer ${this.accessToken}`;
+        this.lastDpopProof = null;
       }
       return fetch('/api/proxy', {
         method: 'POST',
@@ -264,6 +267,11 @@ export class OAuthService {
 
   public getTokenType(): string | null {
     return this.tokenType;
+  }
+
+  /** The DPoP proof JWT sent on the most recent resource call (null if DPoP was off). */
+  public getLastDpopProof(): string | null {
+    return this.lastDpopProof;
   }
 
   public getRefreshToken(): string | null {
