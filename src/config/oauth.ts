@@ -5,6 +5,7 @@ export interface OAuthSettings {
   redirectUri: string;
   protectedResource: string;
   scope: string;
+  dpopEnabled: boolean;
   endpoints: {
     authorize: string;
     token: string;
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: OAuthSettings = {
   redirectUri: "http://localhost:3000/callback",
   protectedResource: "https://your-oauth-server.com/api/resource",
   scope: "openid profile email",
+  dpopEnabled: false,
   endpoints: {
     authorize: "/oauth/authorize",
     token: "/oauth/token",
@@ -27,7 +29,8 @@ const DEFAULT_SETTINGS: OAuthSettings = {
 export function getOAuthSettings(): OAuthSettings {
   const storedSettings = localStorage.getItem("oauth_settings");
   if (storedSettings) {
-    return JSON.parse(storedSettings);
+    // Merge with defaults so newly added fields (e.g. dpopEnabled) get a value.
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(storedSettings) };
   }
   return DEFAULT_SETTINGS;
 }
