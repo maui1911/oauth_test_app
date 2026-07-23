@@ -56,12 +56,17 @@ app.post('/api/oauth/token', async (req, res) => {
 
 // Proxy endpoint for connector calls
 app.post('/api/proxy', async (req, res) => {
-  const { url } = req.body;
+  const { url, method, dpopProof } = req.body;
   const authHeader = req.headers['authorization'];
   console.log('Proxying connector call to:', url);
   try {
-    const response = await axios.get(url, {
-      headers: authHeader ? { Authorization: authHeader } : {},
+    const outgoingHeaders = {};
+    if (authHeader) outgoingHeaders['Authorization'] = authHeader;
+    if (dpopProof) outgoingHeaders['DPoP'] = dpopProof;
+    const response = await axios({
+      method: method || 'GET',
+      url,
+      headers: outgoingHeaders,
       validateStatus: () => true, // Forward all responses
       responseType: 'json' // Ensure JSON response type
     });
