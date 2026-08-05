@@ -186,7 +186,20 @@ function nonceKey(scope: NonceScope, url: string): string {
 function loadNonces(): Record<string, string> {
   try {
     const stored = localStorage.getItem(NONCE_STORAGE_KEY);
-    return stored ? (JSON.parse(stored) as Record<string, string>) : {};
+    if (!stored) {
+      return {};
+    }
+    const parsed: unknown = JSON.parse(stored);
+    // localStorage is writable by anything on this origin, so treat the contents as untrusted.
+    // null would make indexing throw, and assigning onto a primitive throws in strict mode
+    // (ES modules are always strict), which would break rememberNonce on every request.
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return {};
+    }
+    // Drop non-string values as well: they would end up in the nonce claim of a proof.
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => typeof value === "string")
+    ) as Record<string, string>;
   } catch {
     return {};
   }

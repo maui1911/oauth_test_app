@@ -94,10 +94,11 @@ export class OAuthService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tokenUrl, ...bodyParams, dpopProof }),
       });
-      const data = await response.json();
-      // RFC 9449 §8.2: adopt every nonce the AS hands out, on success as well as on the challenge.
-      // Holding on to it is what keeps the next request from starting with a use_dpop_nonce round trip.
-      this.dpop.rememberNonce('as', tokenUrl, response.headers.get('dpop-nonce') ?? data?.dpopNonce);
+      // Read the header before touching the body. A non-JSON error response (proxy down, gateway
+      // error) must not cost us the nonce, and RFC 9449 §8.2 obliges the client to adopt it.
+      const headerNonce = response.headers.get('dpop-nonce');
+      const data = await readJsonOrNull(response);
+      this.dpop.rememberNonce('as', tokenUrl, headerNonce ?? data?.dpopNonce);
       return { response, data };
     };
 
@@ -113,7 +114,7 @@ export class OAuthService {
       }
     }
     if (!response.ok) {
-      throw new Error(data?.error || 'Token request failed');
+      throw new Error(data?.error || `Token request failed (HTTP ${response.status})`);
     }
     this.setTokens(data);
     return data;
@@ -308,6 +309,18 @@ export class OAuthService {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('token_type');
+  }
+}
+
+/**
+ * Parses a JSON body, returning null when the response carries something else. Error responses from
+ * a proxy or gateway are not always JSON, and a parse failure there must not abort the caller.
+ */
+async function readJsonOrNull(response: Response): Promise<any> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
   }
 }
 
