@@ -7,11 +7,20 @@ interface StoredKeyPair {
 }
 
 const STORAGE_KEY = "dpop_keypair";
+const NONCE_STORAGE_KEY = "dpop_nonces";
+
+/**
+ * Which server issued a nonce. RFC 9449 §9: "a nonce issued by any of them should be used only at
+ * the issuing server", so an authorization-server nonce must never be replayed at a resource server.
+ * They are tracked separately even when both happen to live on the same origin.
+ */
+export type NonceScope = "as" | "rs";
 
 export class DPoPService {
   private static instance: DPoPService;
   private keyPairPromise: Promise<CryptoKeyPair> | null = null;
   private publicJwk: JsonWebKey | null = null;
+  private nonces: Record<string, string> = loadNonces();
 
   public static getInstance(): DPoPService {
     if (!DPoPService.instance) {
@@ -132,6 +141,54 @@ export class DPoPService {
     localStorage.removeItem(STORAGE_KEY);
     this.keyPairPromise = null;
     this.publicJwk = null;
+    // Nonces are bound to the key thumbprint by the server, so a new key invalidates all of them.
+    this.nonces = {};
+    localStorage.removeItem(NONCE_STORAGE_KEY);
+  }
+
+  /**
+   * The nonce currently held for this server, or undefined when none was issued yet.
+   * RFC 9449 §8: "clients need to keep only one nonce value" per issuing server.
+   */
+  public getNonce(scope: NonceScope, url: string): string | undefined {
+    return this.nonces[nonceKey(scope, url)];
+  }
+
+  /**
+   * Adopts a nonce supplied by the server. Call this for every response, not just the
+   * use_dpop_nonce challenge: RFC 9449 §8.2 also rotates the nonce on a successful response, which
+   * is what avoids paying an extra round trip on every single request.
+   */
+  public rememberNonce(scope: NonceScope, url: string, nonce: string | null | undefined): void {
+    if (!nonce) {
+      return;
+    }
+    this.nonces[nonceKey(scope, url)] = nonce;
+    try {
+      localStorage.setItem(NONCE_STORAGE_KEY, JSON.stringify(this.nonces));
+    } catch {
+      // Storage full or unavailable — the in-memory copy still works for this session.
+    }
+  }
+}
+
+/** Nonces are per issuing server, and the scope keeps AS and RS apart on a shared origin. */
+function nonceKey(scope: NonceScope, url: string): string {
+  let origin: string;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    origin = url;
+  }
+  return `${scope}|${origin}`;
+}
+
+function loadNonces(): Record<string, string> {
+  try {
+    const stored = localStorage.getItem(NONCE_STORAGE_KEY);
+    return stored ? (JSON.parse(stored) as Record<string, string>) : {};
+  } catch {
+    return {};
   }
 }
 

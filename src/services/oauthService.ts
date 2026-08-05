@@ -95,13 +95,22 @@ export class OAuthService {
         body: JSON.stringify({ tokenUrl, ...bodyParams, dpopProof }),
       });
       const data = await response.json();
+      // RFC 9449 §8.2: adopt every nonce the AS hands out, on success as well as on the challenge.
+      // Holding on to it is what keeps the next request from starting with a use_dpop_nonce round trip.
+      this.dpop.rememberNonce('as', tokenUrl, response.headers.get('dpop-nonce') ?? data?.dpopNonce);
       return { response, data };
     };
 
-    let { response, data } = await doRequest();
-    // DPoP-Nonce challenge: AS answers with error + nonce; retry once with nonce.
-    if (settings.dpopEnabled && !response.ok && data?.dpopNonce) {
-      ({ response, data } = await doRequest(data.dpopNonce));
+    // Start from the nonce we already hold instead of deliberately triggering a challenge.
+    const currentNonce = this.dpop.getNonce('as', tokenUrl);
+    let { response, data } = await doRequest(currentNonce);
+
+    // Only retry when the server actually replaced the nonce, so a persistent failure cannot loop.
+    if (settings.dpopEnabled && !response.ok) {
+      const refreshed = this.dpop.getNonce('as', tokenUrl);
+      if (refreshed && refreshed !== currentNonce) {
+        ({ response, data } = await doRequest(refreshed));
+      }
     }
     if (!response.ok) {
       throw new Error(data?.error || 'Token request failed');
@@ -185,14 +194,19 @@ export class OAuthService {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+      }).then((response) => {
+        // The proxy forwards the resource server's DPoP-Nonce verbatim (RFC 9449 §9).
+        this.dpop.rememberNonce('rs', url, response.headers.get('dpop-nonce'));
+        return response;
       });
     };
 
-    let response = await doRequest();
+    const currentNonce = this.dpop.getNonce('rs', url);
+    let response = await doRequest(currentNonce);
     if (settings.dpopEnabled && response.status === 401) {
-      const nonce = response.headers.get('dpop-nonce');
-      if (nonce) {
-        response = await doRequest(nonce);
+      const refreshed = this.dpop.getNonce('rs', url);
+      if (refreshed && refreshed !== currentNonce) {
+        response = await doRequest(refreshed);
       }
     }
     return response;
