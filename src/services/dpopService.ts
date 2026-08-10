@@ -214,12 +214,6 @@ export class DPoPService {
       case "nonce-garbage":
         payload.nonce = `not-a-real-nonce-${generateJti()}`;
         break;
-      case "nonce-cross-scope":
-        // RFC 9449 §9: valid only at the issuing server. Undefined when no AS nonce is held yet,
-        // in which case this behaves as a missing nonce rather than silently sending a clean proof.
-        payload.nonce = this.anyNonceForScope("as");
-        if (payload.nonce === undefined) delete payload.nonce;
-        break;
       case "ath-missing":
         delete payload.ath;
         break;
@@ -268,13 +262,6 @@ export class DPoPService {
     }
 
     return `${signingInput}.${encodedSignature}`;
-  }
-
-  /** Any nonce held for a scope, used to send an authorization-server nonce to a resource server. */
-  private anyNonceForScope(scope: NonceScope): string | undefined {
-    const prefix = `${scope}|`;
-    const entry = Object.entries(this.nonces).find(([key]) => key.startsWith(prefix));
-    return entry?.[1];
   }
 
   /** Forget the current key (a new one is generated on next use). */

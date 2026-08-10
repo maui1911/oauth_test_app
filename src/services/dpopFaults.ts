@@ -28,7 +28,6 @@ export type DpopFaultKey =
   | "jti-reuse"
   | "nonce-missing"
   | "nonce-garbage"
-  | "nonce-cross-scope"
   | "ath-missing"
   | "ath-wrong"
   | "header-omitted";
@@ -201,17 +200,6 @@ export const DPOP_FAULTS: DpopFault[] = [
     description: "A value the server never issued. Same challenge as a missing nonce.",
     stage: "proof",
     targets: ["as", "rs"],
-    expectedError: "use_dpop_nonce",
-    requiresNonceMode: true,
-  },
-  {
-    key: "nonce-cross-scope",
-    group: "Proof payload",
-    label: "Authorization server nonce sent to the resource server",
-    description:
-      "RFC 9449 section 9: a nonce is only valid at the server that issued it, even when both share an origin.",
-    stage: "proof",
-    targets: ["rs"],
     expectedError: "use_dpop_nonce",
     requiresNonceMode: true,
   },
