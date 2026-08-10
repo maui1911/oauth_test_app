@@ -1,6 +1,8 @@
 // DPoP (RFC 9449) helper: ES256 (EC P-256) keypair management + proof-JWT generation.
 // The private key never leaves the browser; the public JWK is embedded in each proof.
 
+import { findFault, type DpopFaultKey } from "./dpopFaults";
+
 interface StoredKeyPair {
   publicJwk: JsonWebKey;
   privateJwk: JsonWebKey;
@@ -8,6 +10,8 @@ interface StoredKeyPair {
 
 const STORAGE_KEY = "dpop_keypair";
 const NONCE_STORAGE_KEY = "dpop_nonces";
+const FAULT_STORAGE_KEY = "dpop_armed_fault";
+const JTI_STORAGE_KEY = "dpop_last_jti";
 
 /**
  * Which server issued a nonce. RFC 9449 §9: "a nonce issued by any of them should be used only at
@@ -22,11 +26,56 @@ export class DPoPService {
   private publicJwk: JsonWebKey | null = null;
   private nonces: Record<string, string> = loadNonces();
 
+  /**
+   * The fault every proof will carry until it is disarmed.
+   *
+   * Persisted rather than kept in memory because the authorization code flow leaves the page: the
+   * redirect to the authorization server and back rebuilds this service, and an in-memory fault
+   * would be gone exactly when the token exchange needs it.
+   */
+  private armedFault: DpopFaultKey | null = loadArmedFault();
+  private armedListeners = new Set<(fault: DpopFaultKey | null) => void>();
+
+  /**
+   * The last jti actually sent. Kept so the replay scenario can resend it: the server only counts it
+   * as a replay if it recorded that exact value, so inventing one would test nothing.
+   */
+  private lastJti: string | null = loadLastJti();
+
   public static getInstance(): DPoPService {
     if (!DPoPService.instance) {
       DPoPService.instance = new DPoPService();
     }
     return DPoPService.instance;
+  }
+
+  /**
+   * Arms a single fault, which stays armed until it is cleared. Deliberately replaces rather than
+   * accumulates: with two faults active the server stops at whichever check runs first, so the
+   * outcome would no longer say anything about the scenario that was selected.
+   */
+  public armFault(fault: DpopFaultKey | null): void {
+    this.armedFault = fault;
+    try {
+      if (fault) {
+        localStorage.setItem(FAULT_STORAGE_KEY, fault);
+      } else {
+        localStorage.removeItem(FAULT_STORAGE_KEY);
+      }
+    } catch {
+      // Storage unavailable — the in-memory copy still covers this page load.
+    }
+    this.armedListeners.forEach((listener) => listener(fault));
+  }
+
+  public getArmedFault(): DpopFaultKey | null {
+    return this.armedFault;
+  }
+
+  /** Lets the warning banner follow the armed fault across components. */
+  public onArmedFaultChange(listener: (fault: DpopFaultKey | null) => void): () => void {
+    this.armedListeners.add(listener);
+    return () => this.armedListeners.delete(listener);
   }
 
   private async loadOrCreateKeyPair(): Promise<CryptoKeyPair> {
@@ -103,20 +152,93 @@ export class DPoPService {
     htm: string;
     nonce?: string;
     accessToken?: string;
+    /**
+     * Fault to apply to this proof. When omitted the armed fault is used and consumed; pass null to
+     * explicitly build a clean proof. The suite passes it directly so it never races the UI state.
+     */
+    fault?: DpopFaultKey | null;
   }): Promise<string> {
+    const fault = opts.fault !== undefined ? opts.fault : this.armedFault;
+
     const keyPair = await this.getKeyPair();
     const publicJwk = await this.getPublicJwk();
 
-    const header = { typ: "dpop+jwt", alg: "ES256", jwk: publicJwk };
+    const header: Record<string, unknown> = { typ: "dpop+jwt", alg: "ES256", jwk: publicJwk };
 
+    const jti = fault === "jti-reuse" && this.lastJti ? this.lastJti : generateJti();
     const payload: Record<string, unknown> = {
-      jti: generateJti(),
+      jti,
       htm: opts.htm.toUpperCase(),
       htu: normalizeHtu(opts.htu),
       iat: Math.floor(Date.now() / 1000),
     };
     if (opts.nonce) payload.nonce = opts.nonce;
     if (opts.accessToken) payload.ath = await accessTokenHash(opts.accessToken);
+
+    switch (fault) {
+      case "typ-wrong":
+        header.typ = "jwt";
+        break;
+      case "alg-hs256":
+        header.alg = "HS256";
+        break;
+      case "alg-none":
+        header.alg = "none";
+        break;
+      case "jwk-missing":
+        delete header.jwk;
+        break;
+      case "jwk-other":
+        // Signed with the real key but advertising another one, which catches a server that reads
+        // jwk without verifying the signature against it.
+        header.jwk = await unrelatedPublicJwk();
+        break;
+      case "htm-wrong":
+        payload.htm = opts.htm.toUpperCase() === "POST" ? "GET" : "POST";
+        break;
+      case "htu-wrong":
+        payload.htu = `${normalizeHtu(opts.htu)}/somewhere-else`;
+        break;
+      case "iat-past":
+        payload.iat = Math.floor(Date.now() / 1000) - 3600;
+        break;
+      case "iat-future":
+        payload.iat = Math.floor(Date.now() / 1000) + 3600;
+        break;
+      case "jti-missing":
+        delete payload.jti;
+        break;
+      case "nonce-missing":
+        delete payload.nonce;
+        break;
+      case "nonce-garbage":
+        payload.nonce = `not-a-real-nonce-${generateJti()}`;
+        break;
+      case "nonce-cross-scope":
+        // RFC 9449 §9: valid only at the issuing server. Undefined when no AS nonce is held yet,
+        // in which case this behaves as a missing nonce rather than silently sending a clean proof.
+        payload.nonce = this.anyNonceForScope("as");
+        if (payload.nonce === undefined) delete payload.nonce;
+        break;
+      case "ath-missing":
+        delete payload.ath;
+        break;
+      case "ath-wrong":
+        payload.ath = await accessTokenHash("a-completely-different-access-token");
+        break;
+    }
+
+    // Remembered only when actually sent: a proof without jti records nothing server-side, so
+    // carrying it over would make a later replay test compare against something never seen.
+    // Persisted for the same reason as the armed fault: the token exchange happens after a redirect.
+    if (typeof payload.jti === "string") {
+      this.lastJti = payload.jti;
+      try {
+        localStorage.setItem(JTI_STORAGE_KEY, payload.jti);
+      } catch {
+        // Storage unavailable — the in-memory copy still covers this page load.
+      }
+    }
 
     const encodedHeader = base64UrlEncode(
       new TextEncoder().encode(JSON.stringify(header))
@@ -126,14 +248,33 @@ export class DPoPService {
     );
     const signingInput = `${encodedHeader}.${encodedPayload}`;
 
+    // The unsigned-token attack: alg none is only a real test when the signature is genuinely absent.
+    if (fault === "alg-none") {
+      return `${signingInput}.`;
+    }
+
     // WebCrypto ECDSA output is raw r||s (IEEE P1363) === JOSE format. No DER conversion.
     const signature = await crypto.subtle.sign(
       { name: "ECDSA", hash: "SHA-256" },
       keyPair.privateKey,
       new TextEncoder().encode(signingInput)
     );
-    const encodedSignature = base64UrlEncode(new Uint8Array(signature));
+    let encodedSignature = base64UrlEncode(new Uint8Array(signature));
+
+    // Damaged after signing, so every other part of the proof stays valid and only the signature
+    // check can be the reason for rejection.
+    if (fault === "signature-corrupt") {
+      encodedSignature = corruptSignature(encodedSignature);
+    }
+
     return `${signingInput}.${encodedSignature}`;
+  }
+
+  /** Any nonce held for a scope, used to send an authorization-server nonce to a resource server. */
+  private anyNonceForScope(scope: NonceScope): string | undefined {
+    const prefix = `${scope}|`;
+    const entry = Object.entries(this.nonces).find(([key]) => key.startsWith(prefix));
+    return entry?.[1];
   }
 
   /** Forget the current key (a new one is generated on next use). */
@@ -144,6 +285,11 @@ export class DPoPService {
     // Nonces are bound to the key thumbprint by the server, so a new key invalidates all of them.
     this.nonces = {};
     localStorage.removeItem(NONCE_STORAGE_KEY);
+    // The replay key is the thumbprint combined with the jti, so a jti recorded under the old key
+    // would no longer collide and the replay scenario would silently pass.
+    this.lastJti = null;
+    localStorage.removeItem(JTI_STORAGE_KEY);
+    this.armFault(null);
   }
 
   /**
@@ -183,8 +329,29 @@ function nonceKey(scope: NonceScope, url: string): string {
   return `${scope}|${origin}`;
 }
 
-function loadNonces(): Record<string, string> {
+/**
+ * Restores the armed fault after a page load. The stored value is checked against the catalogue,
+ * because localStorage is writable by anything on this origin and an unknown key would silently
+ * behave as "no fault" while the banner claimed otherwise.
+ */
+function loadArmedFault(): DpopFaultKey | null {
   try {
+    const stored = localStorage.getItem(FAULT_STORAGE_KEY);
+    return stored && findFault(stored as DpopFaultKey) ? (stored as DpopFaultKey) : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadLastJti(): string | null {
+  try {
+    return localStorage.getItem(JTI_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function loadNonces(): Record<string, string> {  try {
     const stored = localStorage.getItem(NONCE_STORAGE_KEY);
     if (!stored) {
       return {};
@@ -228,6 +395,28 @@ function generateJti(): string {
   const arr = new Uint8Array(16);
   crypto.getRandomValues(arr);
   return base64UrlEncode(arr);
+}
+
+/** A throwaway public key, for advertising a jwk that did not sign the proof. */
+async function unrelatedPublicJwk(): Promise<JsonWebKey> {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign", "verify"]
+  );
+  const jwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+  return { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y };
+}
+
+/**
+ * Alters one character of the signature while keeping it valid base64url and the same length, so the
+ * proof still parses and fails on verification rather than on decoding.
+ */
+function corruptSignature(encodedSignature: string): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const last = encodedSignature.slice(-1);
+  const replacement = alphabet[(alphabet.indexOf(last) + 1) % alphabet.length];
+  return encodedSignature.slice(0, -1) + replacement;
 }
 
 function base64UrlEncode(buffer: Uint8Array): string {

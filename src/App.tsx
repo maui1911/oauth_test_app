@@ -6,7 +6,9 @@ import { Callback } from './components/Callback'
 import { OAuthSettings } from './components/OAuthSettings'
 import { ConnectorManager } from './components/ConnectorManager'
 import { PerformanceTester } from './components/PerformanceTester'
+import { DpopFaultInjector } from './components/DpopFaultInjector'
 import { DPoPService } from './services/dpopService'
+import { findFault, type DpopFaultKey } from './services/dpopFaults'
 import { getOAuthSettings } from './config/oauth'
 
 function classNames(...classes: string[]) {
@@ -38,7 +40,16 @@ function MainContent() {
   const [error, setError] = useState<string | null>(null)
   const [tokenType, setTokenType] = useState<string | null>(null)
   const [dpopThumbprint, setDpopThumbprint] = useState<string | null>(null)
+  const [armedFault, setArmedFault] = useState<DpopFaultKey | null>(null)
   const oauthService = OAuthService.getInstance()
+
+  // Kept visible app-wide: an armed fault survives until some request consumes it, and without a
+  // reminder it is easy to spend it on an unrelated request and then hunt a failure you caused.
+  useEffect(() => {
+    const dpop = DPoPService.getInstance()
+    setArmedFault(dpop.getArmedFault())
+    return dpop.onArmedFaultChange(setArmedFault)
+  }, [])
 
   useEffect(() => {
     // Load tokens from localStorage on component mount
@@ -117,6 +128,23 @@ function MainContent() {
             </div>
 
             <OAuthSettings onSettingsChange={handleSettingsChange} />
+
+            {armedFault && (
+              <div className="mb-6 flex items-center justify-between gap-4 rounded-md border border-amber-400 bg-amber-50 p-3">
+                <p className="text-sm text-amber-900">
+                  A deliberate DPoP fault is armed:{' '}
+                  <span className="font-semibold">{findFault(armedFault)?.label ?? armedFault}</span>
+                  . It applies to every request until you disarm it, and the automatic nonce retry is
+                  skipped.
+                </p>
+                <button
+                  onClick={() => DPoPService.getInstance().armFault(null)}
+                  className="shrink-0 rounded-md bg-amber-600 px-3 py-1.5 text-sm text-white hover:bg-amber-700"
+                >
+                  Disarm
+                </button>
+              </div>
+            )}
             
             <Tab.Group selectedIndex={selectedIndex} onChange={setSelectedIndex}>
               <Tab.List className="flex space-x-1 rounded-xl bg-blue-900/20 p-1 mb-6">
@@ -158,6 +186,19 @@ function MainContent() {
                   }
                 >
                   Performance Testing
+                </Tab>
+                <Tab
+                  className={({ selected }) =>
+                    classNames(
+                      'w-full rounded-lg py-2.5 text-sm font-medium leading-5',
+                      'ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2',
+                      selected
+                        ? 'bg-white text-blue-700 shadow'
+                        : 'text-blue-100 hover:bg-white/[0.12] hover:text-white'
+                    )
+                  }
+                >
+                  DPoP Faults
                 </Tab>
               </Tab.List>
               <Tab.Panels>
@@ -347,6 +388,12 @@ function MainContent() {
                   {/* Performance Testing Tab */}
                   <div className="mt-4">
                     <PerformanceTester />
+                  </div>
+                </Tab.Panel>
+                <Tab.Panel>
+                  {/* DPoP Faults Tab */}
+                  <div className="mt-4">
+                    <DpopFaultInjector />
                   </div>
                 </Tab.Panel>
               </Tab.Panels>

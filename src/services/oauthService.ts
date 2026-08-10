@@ -80,9 +80,12 @@ export class OAuthService {
     const settings = getOAuthSettings();
     const tokenUrl = `${settings.baseUrl}${settings.endpoints.token}`;
 
+    // Omitting the proof is a request-level fault, so it is handled here rather than in createProof.
+    const armedFault = this.dpop.getArmedFault();
+
     const doRequest = async (nonce?: string) => {
       let dpopProof: string | undefined;
-      if (settings.dpopEnabled) {
+      if (settings.dpopEnabled && armedFault !== 'header-omitted') {
         dpopProof = await this.dpop.createProof({
           htu: tokenUrl,
           htm: 'POST',
@@ -107,7 +110,9 @@ export class OAuthService {
     let { response, data } = await doRequest(currentNonce);
 
     // Only retry when the server actually replaced the nonce, so a persistent failure cannot loop.
-    if (settings.dpopEnabled && !response.ok) {
+    // Never retry a deliberately faulty request: the retry would carry a clean proof and report
+    // success, which hides the very rejection the fault was armed to demonstrate.
+    if (settings.dpopEnabled && !response.ok && !armedFault) {
       const refreshed = this.dpop.getNonce('as', tokenUrl);
       if (refreshed && refreshed !== currentNonce) {
         ({ response, data } = await doRequest(refreshed));
@@ -174,10 +179,13 @@ export class OAuthService {
     }
     const settings = getOAuthSettings();
 
+    // Omitting the proof is a request-level fault, so it is handled here rather than in createProof.
+    const armedFault = this.dpop.getArmedFault();
+
     const doRequest = async (nonce?: string): Promise<Response> => {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       const body: Record<string, unknown> = { url, method };
-      if (settings.dpopEnabled) {
+      if (settings.dpopEnabled && armedFault !== 'header-omitted') {
         const proof = await this.dpop.createProof({
           htu: url,
           htm: method,
@@ -187,6 +195,11 @@ export class OAuthService {
         headers['Authorization'] = `DPoP ${this.accessToken}`;
         body.dpopProof = proof;
         this.lastDpopProof = proof;
+      } else if (settings.dpopEnabled) {
+        // The token still travels as DPoP, so the server rejects the missing proof rather than
+        // falling back to treating this as a plain bearer request.
+        headers['Authorization'] = `DPoP ${this.accessToken}`;
+        this.lastDpopProof = null;
       } else {
         headers['Authorization'] = `Bearer ${this.accessToken}`;
         this.lastDpopProof = null;
@@ -204,7 +217,8 @@ export class OAuthService {
 
     const currentNonce = this.dpop.getNonce('rs', url);
     let response = await doRequest(currentNonce);
-    if (settings.dpopEnabled && response.status === 401) {
+    // Never retry a deliberately faulty request: a clean retry would mask the rejection.
+    if (settings.dpopEnabled && response.status === 401 && !armedFault) {
       const refreshed = this.dpop.getNonce('rs', url);
       if (refreshed && refreshed !== currentNonce) {
         response = await doRequest(refreshed);
@@ -225,7 +239,11 @@ export class OAuthService {
       console.log('Protected resource response status:', response.status);
 
       if (!response.ok) {
-        if (response.status === 401 && this.refreshToken && retryOnAuthFailure) {
+        // A 401 normally means the access token expired, but with a fault armed it is the expected
+        // outcome of the resource call itself. Refreshing here would send the same broken proof to
+        // the token endpoint and surface that failure instead, hiding the result being tested.
+        const armedFault = this.dpop.getArmedFault();
+        if (response.status === 401 && this.refreshToken && retryOnAuthFailure && !armedFault) {
           console.log('Access token expired, refreshing...');
           await this.refreshAccessToken();
           // Retry once; pass false to avoid an infinite refresh/retry loop on persistent 401s.
