@@ -1,9 +1,20 @@
 import { useState } from 'react';
-import { getOAuthSettings, saveOAuthSettings, resetOAuthSettings } from '../config/oauth';
+import {
+  getOAuthSettings,
+  saveOAuthSettings,
+  resetOAuthSettings,
+  resolveClientAssertionAudience,
+  type ClientAssertionAlg,
+  type ClientAssertionAudience,
+  type ClientAuthMethod,
+} from '../config/oauth';
 
 interface OAuthSettingsProps {
   onSettingsChange: () => void;
 }
+
+const INPUT_CLASS =
+  'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500';
 
 export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
   const [settings, setSettings] = useState(getOAuthSettings());
@@ -21,6 +32,8 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
     setIsEditing(false);
     onSettingsChange();
   };
+
+  const usesPrivateKeyJwt = settings.clientAuthMethod === 'private_key_jwt';
 
   if (!isEditing) {
     return (
@@ -45,9 +58,28 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               <p className="text-sm text-gray-900">{settings.clientId}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-500">Client Secret</p>
-              <p className="text-sm text-gray-900">••••••••</p>
+              <p className="text-sm font-medium text-gray-500">Client authentication</p>
+              <p className="text-sm text-gray-900">
+                {usesPrivateKeyJwt ? `private_key_jwt (${settings.clientAssertionAlg})` : 'client_secret_post'}
+              </p>
             </div>
+            {usesPrivateKeyJwt ? (
+              <>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Assertion audience</p>
+                  <p className="text-sm text-gray-900 break-all">{resolveClientAssertionAudience(settings)}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">jwks_uri</p>
+                  <p className="text-sm text-gray-900 break-all">{settings.jwksPublicUrl}</p>
+                </div>
+              </>
+            ) : (
+              <div>
+                <p className="text-sm font-medium text-gray-500">Client Secret</p>
+                <p className="text-sm text-gray-900">••••••••</p>
+              </div>
+            )}
             <div>
               <p className="text-sm font-medium text-gray-500">Redirect URI</p>
               <p className="text-sm text-gray-900">{settings.redirectUri}</p>
@@ -103,7 +135,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               type="text"
               value={settings.baseUrl}
               onChange={(e) => setSettings({ ...settings, baseUrl: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className={INPUT_CLASS}
               placeholder="https://your-oauth-server.com"
             />
           </div>
@@ -113,27 +145,104 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               type="text"
               value={settings.clientId}
               onChange={(e) => setSettings({ ...settings, clientId: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className={INPUT_CLASS}
               placeholder="your_client_id"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Client Secret</label>
-            <input
-              type="password"
-              value={settings.clientSecret}
-              onChange={(e) => setSettings({ ...settings, clientSecret: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder="your_client_secret"
-            />
+            <label className="block text-sm font-medium text-gray-700">Client authentication</label>
+            <select
+              value={settings.clientAuthMethod}
+              onChange={(e) =>
+                setSettings({ ...settings, clientAuthMethod: e.target.value as ClientAuthMethod })
+              }
+              className={INPUT_CLASS}
+            >
+              <option value="client_secret_post">client_secret_post — shared secret in the request body</option>
+              <option value="private_key_jwt">private_key_jwt — signed client_assertion (RFC 7523)</option>
+            </select>
           </div>
+          {usesPrivateKeyJwt ? (
+            <div className="space-y-4 rounded-md border border-gray-200 p-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Assertion algorithm</label>
+                <select
+                  value={settings.clientAssertionAlg}
+                  onChange={(e) =>
+                    setSettings({ ...settings, clientAssertionAlg: e.target.value as ClientAssertionAlg })
+                  }
+                  className={INPUT_CLASS}
+                >
+                  <option value="RS256">RS256 — RSA 2048</option>
+                  <option value="ES256">ES256 — EC P-256</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Assertion audience (aud)</label>
+                <select
+                  value={settings.clientAssertionAudience}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      clientAssertionAudience: e.target.value as ClientAssertionAudience,
+                    })
+                  }
+                  className={INPUT_CLASS}
+                >
+                  <option value="token_endpoint">Token endpoint URL</option>
+                  <option value="issuer">Issuer (base URL)</option>
+                  <option value="custom">Custom value</option>
+                </select>
+                {settings.clientAssertionAudience === 'custom' ? (
+                  <input
+                    type="text"
+                    value={settings.clientAssertionCustomAudience}
+                    onChange={(e) =>
+                      setSettings({ ...settings, clientAssertionCustomAudience: e.target.value })
+                    }
+                    className={INPUT_CLASS}
+                    placeholder="https://your-oauth-server.com/oauth/token"
+                  />
+                ) : (
+                  <p className="mt-1 text-xs text-gray-500 break-all">
+                    Will be sent as: {resolveClientAssertionAudience(settings)}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">JWKS public URL</label>
+                <input
+                  type="text"
+                  value={settings.jwksPublicUrl}
+                  onChange={(e) => setSettings({ ...settings, jwksPublicUrl: e.target.value })}
+                  className={INPUT_CLASS}
+                  placeholder="http://localhost:8080/api/jwks"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  The URL at which the authorization server can reach this app's /api/jwks endpoint.
+                  Change it when the server runs elsewhere (hostname, tunnel). Display only.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Client Secret</label>
+              <input
+                type="password"
+                value={settings.clientSecret}
+                onChange={(e) => setSettings({ ...settings, clientSecret: e.target.value })}
+                className={INPUT_CLASS}
+                placeholder="your_client_secret"
+              />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700">Redirect URI</label>
             <input
               type="text"
               value={settings.redirectUri}
               onChange={(e) => setSettings({ ...settings, redirectUri: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className={INPUT_CLASS}
               placeholder="http://localhost:3000/callback"
             />
           </div>
@@ -143,7 +252,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               type="text"
               value={settings.protectedResource}
               onChange={(e) => setSettings({ ...settings, protectedResource: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className={INPUT_CLASS}
               placeholder="https://your-oauth-server.com/api/resource"
             />
           </div>
@@ -153,7 +262,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               type="text"
               value={settings.scope}
               onChange={(e) => setSettings({ ...settings, scope: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className={INPUT_CLASS}
               placeholder="openid profile email"
             />
           </div>
@@ -173,4 +282,4 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
       </div>
     </div>
   );
-} 
+}

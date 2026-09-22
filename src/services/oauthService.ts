@@ -1,4 +1,4 @@
-import { getOAuthSettings } from '../config/oauth';
+import { getOAuthSettings, getTokenUrl, resolveClientAssertionAudience } from '../config/oauth';
 import { DPoPService } from './dpopService';
 
 interface TokenResponse {
@@ -17,6 +17,7 @@ export class OAuthService {
   private state: string | null = null;
   private tokenType: string | null = null;
   private lastDpopProof: string | null = null;
+  private lastClientAssertion: string | null = null;
   private dpop = DPoPService.getInstance();
 
   private constructor() {
@@ -78,10 +79,22 @@ export class OAuthService {
     bodyParams: Record<string, unknown>
   ): Promise<TokenResponse> {
     const settings = getOAuthSettings();
-    const tokenUrl = `${settings.baseUrl}${settings.endpoints.token}`;
+    const tokenUrl = getTokenUrl(settings);
 
     // Omitting the proof is a request-level fault, so it is handled here rather than in createProof.
     const armedFault = this.dpop.getArmedFault();
+
+    // The proxy signs the client_assertion, since only it holds the private key.
+    const clientAuth =
+      settings.clientAuthMethod === 'private_key_jwt'
+        ? {
+            clientAuthMethod: 'private_key_jwt',
+            clientAssertionAlg: settings.clientAssertionAlg,
+            clientAssertionAudience: resolveClientAssertionAudience(settings),
+          }
+        : { clientAuthMethod: 'client_secret_post', clientSecret: settings.clientSecret };
+
+    this.lastClientAssertion = null;
 
     const doRequest = async (nonce?: string) => {
       let dpopProof: string | undefined;
@@ -95,11 +108,12 @@ export class OAuthService {
       const response = await fetch('/api/oauth/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tokenUrl, ...bodyParams, dpopProof }),
+        body: JSON.stringify({ tokenUrl, ...bodyParams, ...clientAuth, dpopProof }),
       });
       // Read the header before touching the body. A non-JSON error response (proxy down, gateway
       // error) must not cost us the nonce, and RFC 9449 §8.2 obliges the client to adopt it.
       const headerNonce = response.headers.get('dpop-nonce');
+      this.lastClientAssertion = response.headers.get('x-client-assertion');
       const data = await readJsonOrNull(response);
       this.dpop.rememberNonce('as', tokenUrl, headerNonce ?? data?.dpopNonce);
       return { response, data };
@@ -135,7 +149,6 @@ export class OAuthService {
     const settings = getOAuthSettings();
     const data = await this.requestToken({
       clientId: settings.clientId,
-      clientSecret: settings.clientSecret,
       code,
       redirectUri: settings.redirectUri,
       codeVerifier: this.codeVerifier,
@@ -150,7 +163,6 @@ export class OAuthService {
     const settings = getOAuthSettings();
     return this.requestToken({
       clientId: settings.clientId,
-      clientSecret: settings.clientSecret,
       grantType: 'client_credentials',
       scope: settings.scope,
     });
@@ -163,7 +175,6 @@ export class OAuthService {
     const settings = getOAuthSettings();
     return this.requestToken({
       clientId: settings.clientId,
-      clientSecret: settings.clientSecret,
       grantType: 'refresh_token',
       refreshToken: this.refreshToken,
     });
@@ -306,6 +317,11 @@ export class OAuthService {
   /** The DPoP proof JWT sent on the most recent resource call (null if DPoP was off). */
   public getLastDpopProof(): string | null {
     return this.lastDpopProof;
+  }
+
+  /** The client_assertion JWT sent on the most recent token request (null under client_secret_post). */
+  public getLastClientAssertion(): string | null {
+    return this.lastClientAssertion;
   }
 
   public getRefreshToken(): string | null {
