@@ -34,3 +34,6 @@ yarn-error.log*
 *.sw?
 # private_key_jwt client keys (generated on first start)
 /server/keys
+
+# playwright-cli session output
+/.playwright-cli
