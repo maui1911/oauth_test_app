@@ -7,14 +7,41 @@ interface ClientKeysPanelProps {
 
 const ALGORITHMS = ['RS256', 'ES256'] as const;
 
+interface PublishedKey {
+  alg: string;
+  kid: string;
+  'x5t#S256': string;
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard unavailable (insecure context); the value is still visible to copy by hand.
+    }
+  };
+  return (
+    <button
+      onClick={copy}
+      className="shrink-0 rounded-md bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
+    >
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
 /**
  * Shows what the authorization server needs to verify our client_assertion: the jwks_uri and, for
  * servers that take an upload instead, the same public keys as downloadable certificates.
  */
 export function ClientKeysPanel({ jwksPublicUrl }: ClientKeysPanelProps) {
   const [jwks, setJwks] = useState<string | null>(null);
+  const [publishedKeys, setPublishedKeys] = useState<PublishedKey[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetch('/api/jwks')
@@ -22,21 +49,14 @@ export function ClientKeysPanel({ jwksPublicUrl }: ClientKeysPanelProps) {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
       })
-      .then((data) => setJwks(JSON.stringify(data, null, 2)))
+      .then((data) => {
+        setJwks(JSON.stringify(data, null, 2));
+        setPublishedKeys(Array.isArray(data?.keys) ? data.keys : []);
+      })
       .catch((err: unknown) =>
         setError(`Could not load /api/jwks (is the proxy running?): ${err instanceof Error ? err.message : String(err)}`)
       );
   }, []);
-
-  const copyJwksUri = async () => {
-    try {
-      await navigator.clipboard.writeText(jwksPublicUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard unavailable (insecure context); the URL is still visible to copy by hand.
-    }
-  };
 
   return (
     <div className="mb-6 rounded-md border border-gray-200 bg-gray-50 p-4">
@@ -49,13 +69,25 @@ export function ClientKeysPanel({ jwksPublicUrl }: ClientKeysPanelProps) {
       <div className="flex items-center gap-2 mb-3">
         <span className="text-sm font-medium text-gray-500">jwks_uri</span>
         <code className="text-sm text-gray-900 break-all">{jwksPublicUrl}</code>
-        <button
-          onClick={copyJwksUri}
-          className="shrink-0 rounded-md bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </button>
+        <CopyButton value={jwksPublicUrl} />
       </div>
+      {publishedKeys.length > 0 && (
+        <div className="mb-3 space-y-1">
+          <p className="text-sm font-medium text-gray-500">Key identifiers</p>
+          {publishedKeys.map((key) => (
+            <div key={key.kid} className="grid grid-cols-[4rem_5rem_1fr_auto] items-center gap-2 text-sm">
+              <span className="font-semibold text-gray-700">{key.alg}</span>
+              <span className="text-gray-500">kid</span>
+              <code className="text-gray-900 break-all">{key.kid}</code>
+              <CopyButton value={key.kid} />
+              <span />
+              <span className="text-gray-500">x5t#S256</span>
+              <code className="text-gray-900 break-all">{key['x5t#S256']}</code>
+              <CopyButton value={key['x5t#S256']} />
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <span className="text-sm font-medium text-gray-500">Certificates</span>
         {ALGORITHMS.map((alg) => (
