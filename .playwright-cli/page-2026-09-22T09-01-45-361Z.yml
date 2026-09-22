@@ -1,0 +1,102 @@
+- generic [ref=e6]:
+  - generic [ref=e7]:
+    - heading "OAuth 2.1 Test Application" [level=1] [ref=e8]
+    - button "Clear Tokens" [ref=e76] [cursor=pointer]
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - heading "Edit OAuth Settings" [level=2] [ref=e92]
+      - generic [ref=e93]:
+        - button "Reset to Default" [ref=e94] [cursor=pointer]
+        - button "Save Changes" [ref=e95] [cursor=pointer]
+        - button "Cancel" [ref=e96] [cursor=pointer]
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - generic [ref=e97]: Base URL
+        - textbox "https://your-oauth-server.com" [ref=e98]: http://localhost:18081
+      - generic [ref=e18]:
+        - generic [ref=e99]: Client ID
+        - textbox "your_client_id" [ref=e100]: ui-client
+      - generic [ref=e21]:
+        - generic [ref=e101]: Client authentication
+        - combobox [ref=e102]:
+          - option "client_secret_post — shared secret in the request body"
+          - option "private_key_jwt — signed client_assertion (RFC 7523)" [selected]
+      - generic [ref=e103]:
+        - generic [ref=e104]:
+          - generic [ref=e105]: Assertion algorithm
+          - combobox [ref=e106]:
+            - option "RS256 — RSA 2048"
+            - option "ES256 — EC P-256" [selected]
+        - generic [ref=e107]:
+          - generic [ref=e108]: Assertion audience (aud)
+          - combobox [ref=e109]:
+            - option "Token endpoint URL"
+            - option "Issuer (base URL)" [selected]
+            - option "Custom value"
+          - paragraph [ref=e110]: "Will be sent as: http://localhost:18081"
+        - generic [ref=e111]:
+          - generic [ref=e112]: JWKS public URL
+          - textbox "http://localhost:8080/api/jwks" [ref=e113]: http://my-host:8080/api/jwks
+          - paragraph [ref=e114]: The URL at which the authorization server can reach this app's /api/jwks endpoint. Change it when the server runs elsewhere (hostname, tunnel). Display only.
+      - generic [ref=e30]:
+        - generic [ref=e115]: Redirect URI
+        - textbox "http://localhost:3000/callback" [ref=e116]
+      - generic [ref=e33]:
+        - generic [ref=e117]: Protected Resource
+        - textbox "https://your-oauth-server.com/api/resource" [ref=e118]: http://localhost:18081/res
+      - generic [ref=e36]:
+        - generic [ref=e119]: Scope
+        - textbox "openid profile email" [ref=e120]: api
+      - generic [ref=e39]:
+        - checkbox "Enable DPoP (RFC 9449) — sender-constrained tokens" [ref=e121]
+        - generic [ref=e122]: Enable DPoP (RFC 9449) — sender-constrained tokens
+  - generic [ref=e42]:
+    - heading "Client keys (private_key_jwt)" [level=2] [ref=e43]
+    - paragraph [ref=e44]: Register either the jwks_uri or one of the certificates at the authorization server. The assertion header carries kid, x5t and x5t#S256, so both ways of registering work.
+    - generic [ref=e45]:
+      - generic [ref=e46]: jwks_uri
+      - code [ref=e47]: http://my-host:8080/api/jwks
+      - button "Copy" [ref=e48] [cursor=pointer]
+    - generic [ref=e49]:
+      - generic [ref=e50]: Certificates
+      - generic [ref=e51]:
+        - link "RS256 .cer (DER)" [ref=e52] [cursor=pointer]:
+          - /url: /api/client-cert/RS256.cer
+        - link "RS256 .pem" [ref=e53] [cursor=pointer]:
+          - /url: /api/client-cert/RS256.pem
+      - generic [ref=e54]:
+        - link "ES256 .cer (DER)" [ref=e55] [cursor=pointer]:
+          - /url: /api/client-cert/ES256.cer
+        - link "ES256 .pem" [ref=e56] [cursor=pointer]:
+          - /url: /api/client-cert/ES256.pem
+    - group [ref=e72]:
+      - generic "JWKS contents" [ref=e73] [cursor=pointer]
+  - tablist [ref=e57]:
+    - tab "OAuth Flows" [selected] [ref=e58] [cursor=pointer]
+    - tab "API Connectors" [ref=e59] [cursor=pointer]
+    - tab "Performance Testing" [ref=e60] [cursor=pointer]
+    - tab "DPoP Faults" [ref=e61] [cursor=pointer]
+  - tabpanel "OAuth Flows" [ref=e63]:
+    - tablist [ref=e64]:
+      - tab "Authorization Code Flow" [ref=e65] [cursor=pointer]
+      - tab "Client Credentials Flow" [selected] [ref=e66] [cursor=pointer]
+    - generic [ref=e67]:
+      - generic [ref=e68]:
+        - heading "Client Credentials Flow" [level=2] [ref=e74]
+        - generic [ref=e70]:
+          - button "Start Client Credentials Flow" [ref=e75] [cursor=pointer]
+          - generic [ref=e77]:
+            - paragraph [ref=e78]: "Token type: Bearer"
+            - heading "Access Token:" [level=3] [ref=e79]
+            - generic [ref=e80]: mock.token.value
+      - generic [ref=e81]:
+        - heading "Client assertion (sent to token endpoint):" [level=3] [ref=e82]
+        - generic [ref=e83]: eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Im1hTUhtLVgwdUM2TFI1eVd2MUFSZHVQczBuM3ZvdlVRQlhJRlRhTzdTRjgiLCJ4NXQiOiJBYnQ2TTNkYWQzMF8wVnFuam1VUmJ5cE9CZmciLCJ4NXQjUzI1NiI6IjVWTFNLa0FiX2E4LUlmR2JQS1RMZEI2Ql9rTld1a0FfeVNoUkpvV1B5eXcifQ.eyJpc3MiOiJ1aS1jbGllbnQiLCJzdWIiOiJ1aS1jbGllbnQiLCJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjE4MDgxIiwianRpIjoiX2k2TUY1eV8tNldBZEx4ZnFqN19hZyIsImlhdCI6MTc5MDA2NzY4MiwiZXhwIjoxNzkwMDY3NzQyfQ.YM8Yam8ermAcXiqTY_cBoZ_o0xtghXA0hoB1eFEuhMZQH531UZ0OXQoi4d1YGI-UUDEU93O1HfwZnAXGYD_0ig
+        - generic [ref=e84]:
+          - heading "Decoded header:" [level=4] [ref=e85]
+          - generic [ref=e86]: "{ \"alg\": \"ES256\", \"typ\": \"JWT\", \"kid\": \"maMHm-X0uC6LR5yWv1ARduPs0n3vovUQBXIFTaO7SF8\", \"x5t\": \"Abt6M3dad30_0VqnjmURbypOBfg\", \"x5t#S256\": \"5VLSKkAb_a8-IfGbPKTLdB6B_kNWukA_yShRJoWPyyw\" }"
+          - heading "Decoded payload:" [level=4] [ref=e87]
+          - generic [ref=e88]: "{ \"iss\": \"ui-client\", \"sub\": \"ui-client\", \"aud\": \"http://localhost:18081\", \"jti\": \"_i6MF5y_-6WAdLxfqj7_ag\", \"iat\": 1790067682, \"exp\": 1790067742 }"
+      - generic [ref=e89]:
+        - heading "Protected Resource" [level=2] [ref=e90]
+        - button "Get Protected Resource" [ref=e91] [cursor=pointer]

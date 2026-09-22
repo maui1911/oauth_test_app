@@ -7,6 +7,7 @@ import { OAuthSettings } from './components/OAuthSettings'
 import { ConnectorManager } from './components/ConnectorManager'
 import { PerformanceTester } from './components/PerformanceTester'
 import { DpopFaultInjector } from './components/DpopFaultInjector'
+import { ClientKeysPanel } from './components/ClientKeysPanel'
 import { DPoPService } from './services/dpopService'
 import { findFault, type DpopFaultKey } from './services/dpopFaults'
 import { getOAuthSettings } from './config/oauth'
@@ -30,8 +31,33 @@ function decodeJwt(token: string): { header: any; payload: any } | null {
   }
 }
 
+function JwtDump({ title, token }: { title: string; token: string }) {
+  const decoded = decodeJwt(token)
+  return (
+    <div className="mt-4">
+      <h3 className="text-sm font-medium text-gray-700">{title}</h3>
+      <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
+        {token}
+      </pre>
+      {decoded && (
+        <div className="mt-2">
+          <h4 className="text-xs font-medium text-gray-500">Decoded header:</h4>
+          <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+            {JSON.stringify(decoded.header, null, 2)}
+          </pre>
+          <h4 className="text-xs font-medium text-gray-500 mt-2">Decoded payload:</h4>
+          <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+            {JSON.stringify(decoded.payload, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MainContent() {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [settings, setSettings] = useState(getOAuthSettings())
   const [selectedFlow, setSelectedFlow] = useState<'authorization_code' | 'client_credentials'>('authorization_code')
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [refreshToken, setRefreshToken] = useState<string | null>(null)
@@ -41,6 +67,7 @@ function MainContent() {
   const [tokenType, setTokenType] = useState<string | null>(null)
   const [dpopThumbprint, setDpopThumbprint] = useState<string | null>(null)
   const [armedFault, setArmedFault] = useState<DpopFaultKey | null>(null)
+  const [clientAssertion, setClientAssertion] = useState<string | null>(null)
   const oauthService = OAuthService.getInstance()
 
   // Kept visible app-wide: an armed fault survives until some request consumes it, and without a
@@ -56,6 +83,9 @@ function MainContent() {
     setAccessToken(oauthService.getAccessToken())
     setRefreshToken(oauthService.getRefreshToken())
     setTokenType(oauthService.getTokenType())
+    // Survives the authorization code redirect: the callback route exchanges the code on this same
+    // service instance before navigating here.
+    setClientAssertion(oauthService.getLastClientAssertion())
     if (getOAuthSettings().dpopEnabled) {
       DPoPService.getInstance().getThumbprint().then(setDpopThumbprint).catch(() => {})
     }
@@ -82,6 +112,9 @@ function MainContent() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get client credentials token')
+    } finally {
+      // Shown on failure too: a rejected assertion is what needs inspecting.
+      setClientAssertion(oauthService.getLastClientAssertion())
     }
   }
 
@@ -103,11 +136,13 @@ function MainContent() {
     setProtectedResourceData(null)
     setDpopProof(null)
     setTokenType(null)
+    setClientAssertion(null)
   }
 
   const handleSettingsChange = () => {
     // Clear tokens when settings change to ensure we're using the new configuration
     handleClearTokens()
+    setSettings(getOAuthSettings())
   }
 
   return (
@@ -128,6 +163,10 @@ function MainContent() {
             </div>
 
             <OAuthSettings onSettingsChange={handleSettingsChange} />
+
+            {settings.clientAuthMethod === 'private_key_jwt' && (
+              <ClientKeysPanel jwksPublicUrl={settings.jwksPublicUrl} />
+            )}
 
             {armedFault && (
               <div className="mb-6 flex items-center justify-between gap-4 rounded-md border border-amber-400 bg-amber-50 p-3">
@@ -332,6 +371,10 @@ function MainContent() {
                           )}
                         </div>
                       </div>
+                    )}
+
+                    {clientAssertion && (
+                      <JwtDump title="Client assertion (sent to token endpoint):" token={clientAssertion} />
                     )}
 
                     {accessToken && (

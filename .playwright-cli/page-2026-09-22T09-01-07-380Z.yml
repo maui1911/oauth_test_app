@@ -1,0 +1,43 @@
+- generic [ref=e6]:
+  - heading "OAuth 2.1 Test Application" [level=1] [ref=e8]
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - heading "OAuth Settings" [level=2] [ref=e11]
+      - button "Edit Settings" [ref=e12] [cursor=pointer]
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - paragraph [ref=e16]: Base URL
+        - paragraph [ref=e17]: https://your-oauth-server.com
+      - generic [ref=e18]:
+        - paragraph [ref=e19]: Client ID
+        - paragraph [ref=e20]: your_client_id
+      - generic [ref=e21]:
+        - paragraph [ref=e22]: Client authentication
+        - paragraph [ref=e23]: client_secret_post
+      - generic [ref=e24]:
+        - paragraph [ref=e25]: Client Secret
+        - paragraph [ref=e26]: ••••••••
+      - generic [ref=e27]:
+        - paragraph [ref=e28]: Redirect URI
+        - paragraph [ref=e29]: http://localhost:3000/callback
+      - generic [ref=e30]:
+        - paragraph [ref=e31]: Protected Resource
+        - paragraph [ref=e32]: https://your-oauth-server.com/api/resource
+      - generic [ref=e33]:
+        - paragraph [ref=e34]: Scope
+        - paragraph [ref=e35]: openid profile email
+      - generic [ref=e36]:
+        - paragraph [ref=e37]: DPoP (RFC 9449)
+        - paragraph [ref=e38]: Disabled
+  - tablist [ref=e39]:
+    - tab "OAuth Flows" [selected] [ref=e40] [cursor=pointer]
+    - tab "API Connectors" [ref=e41] [cursor=pointer]
+    - tab "Performance Testing" [ref=e42] [cursor=pointer]
+    - tab "DPoP Faults" [ref=e43] [cursor=pointer]
+  - tabpanel "OAuth Flows" [ref=e45]:
+    - tablist [ref=e46]:
+      - tab "Authorization Code Flow" [selected] [ref=e47] [cursor=pointer]
+      - tab "Client Credentials Flow" [ref=e48] [cursor=pointer]
+    - generic [ref=e50]:
+      - heading "Authorization Code Flow" [level=2] [ref=e51]
+      - button "Start Authorization Code Flow" [ref=e53] [cursor=pointer]

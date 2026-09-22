@@ -1,0 +1,86 @@
+- generic [ref=e6]:
+  - generic [ref=e7]:
+    - heading "OAuth 2.1 Test Application" [level=1] [ref=e8]
+    - button "Clear Tokens" [ref=e76] [cursor=pointer]
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - heading "OAuth Settings" [level=2] [ref=e11]
+      - button "Edit Settings" [ref=e12] [cursor=pointer]
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - paragraph [ref=e16]: Base URL
+        - paragraph [ref=e17]: http://localhost:18081
+      - generic [ref=e18]:
+        - paragraph [ref=e19]: Client ID
+        - paragraph [ref=e20]: ui-client
+      - generic [ref=e21]:
+        - paragraph [ref=e22]: Client authentication
+        - paragraph [ref=e23]: private_key_jwt (ES256)
+      - generic [ref=e24]:
+        - paragraph [ref=e25]: Assertion audience
+        - paragraph [ref=e26]: http://localhost:18081
+      - generic [ref=e27]:
+        - paragraph [ref=e28]: jwks_uri
+        - paragraph [ref=e29]: http://my-host:8080/api/jwks
+      - generic [ref=e30]:
+        - paragraph [ref=e31]: Redirect URI
+        - paragraph [ref=e32]: http://localhost:3000/callback
+      - generic [ref=e33]:
+        - paragraph [ref=e34]: Protected Resource
+        - paragraph [ref=e35]: http://localhost:18081/res
+      - generic [ref=e36]:
+        - paragraph [ref=e37]: Scope
+        - paragraph [ref=e38]: api
+      - generic [ref=e39]:
+        - paragraph [ref=e40]: DPoP (RFC 9449)
+        - paragraph [ref=e41]: Disabled
+  - generic [ref=e42]:
+    - heading "Client keys (private_key_jwt)" [level=2] [ref=e43]
+    - paragraph [ref=e44]: Register either the jwks_uri or one of the certificates at the authorization server. The assertion header carries kid, x5t and x5t#S256, so both ways of registering work.
+    - generic [ref=e45]:
+      - generic [ref=e46]: jwks_uri
+      - code [ref=e47]: http://my-host:8080/api/jwks
+      - button "Copy" [ref=e48] [cursor=pointer]
+    - generic [ref=e49]:
+      - generic [ref=e50]: Certificates
+      - generic [ref=e51]:
+        - link "RS256 .cer (DER)" [ref=e52] [cursor=pointer]:
+          - /url: /api/client-cert/RS256.cer
+        - link "RS256 .pem" [ref=e53] [cursor=pointer]:
+          - /url: /api/client-cert/RS256.pem
+      - generic [ref=e54]:
+        - link "ES256 .cer (DER)" [ref=e55] [cursor=pointer]:
+          - /url: /api/client-cert/ES256.cer
+        - link "ES256 .pem" [ref=e56] [cursor=pointer]:
+          - /url: /api/client-cert/ES256.pem
+    - group [ref=e72]:
+      - generic "JWKS contents" [ref=e73] [cursor=pointer]
+  - tablist [ref=e57]:
+    - tab "OAuth Flows" [selected] [ref=e58] [cursor=pointer]
+    - tab "API Connectors" [ref=e59] [cursor=pointer]
+    - tab "Performance Testing" [ref=e60] [cursor=pointer]
+    - tab "DPoP Faults" [ref=e61] [cursor=pointer]
+  - tabpanel "OAuth Flows" [ref=e63]:
+    - tablist [ref=e64]:
+      - tab "Authorization Code Flow" [ref=e65] [cursor=pointer]
+      - tab "Client Credentials Flow" [selected] [ref=e66] [cursor=pointer]
+    - generic [ref=e67]:
+      - generic [ref=e68]:
+        - heading "Client Credentials Flow" [level=2] [ref=e74]
+        - generic [ref=e70]:
+          - button "Start Client Credentials Flow" [active] [ref=e75] [cursor=pointer]
+          - generic [ref=e77]:
+            - paragraph [ref=e78]: "Token type: Bearer"
+            - heading "Access Token:" [level=3] [ref=e79]
+            - generic [ref=e80]: mock.token.value
+      - generic [ref=e81]:
+        - heading "Client assertion (sent to token endpoint):" [level=3] [ref=e82]
+        - generic [ref=e83]: eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Im1hTUhtLVgwdUM2TFI1eVd2MUFSZHVQczBuM3ZvdlVRQlhJRlRhTzdTRjgiLCJ4NXQiOiJBYnQ2TTNkYWQzMF8wVnFuam1VUmJ5cE9CZmciLCJ4NXQjUzI1NiI6IjVWTFNLa0FiX2E4LUlmR2JQS1RMZEI2Ql9rTld1a0FfeVNoUkpvV1B5eXcifQ.eyJpc3MiOiJ1aS1jbGllbnQiLCJzdWIiOiJ1aS1jbGllbnQiLCJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjE4MDgxIiwianRpIjoiX2k2TUY1eV8tNldBZEx4ZnFqN19hZyIsImlhdCI6MTc5MDA2NzY4MiwiZXhwIjoxNzkwMDY3NzQyfQ.YM8Yam8ermAcXiqTY_cBoZ_o0xtghXA0hoB1eFEuhMZQH531UZ0OXQoi4d1YGI-UUDEU93O1HfwZnAXGYD_0ig
+        - generic [ref=e84]:
+          - heading "Decoded header:" [level=4] [ref=e85]
+          - generic [ref=e86]: "{ \"alg\": \"ES256\", \"typ\": \"JWT\", \"kid\": \"maMHm-X0uC6LR5yWv1ARduPs0n3vovUQBXIFTaO7SF8\", \"x5t\": \"Abt6M3dad30_0VqnjmURbypOBfg\", \"x5t#S256\": \"5VLSKkAb_a8-IfGbPKTLdB6B_kNWukA_yShRJoWPyyw\" }"
+          - heading "Decoded payload:" [level=4] [ref=e87]
+          - generic [ref=e88]: "{ \"iss\": \"ui-client\", \"sub\": \"ui-client\", \"aud\": \"http://localhost:18081\", \"jti\": \"_i6MF5y_-6WAdLxfqj7_ag\", \"iat\": 1790067682, \"exp\": 1790067742 }"
+      - generic [ref=e89]:
+        - heading "Protected Resource" [level=2] [ref=e90]
+        - button "Get Protected Resource" [ref=e91] [cursor=pointer]
