@@ -94,6 +94,8 @@ export class OAuthService {
           }
         : { clientAuthMethod: 'client_secret_post', clientSecret: settings.clientSecret };
 
+    this.lastClientAssertion = null;
+
     const doRequest = async (nonce?: string) => {
       let dpopProof: string | undefined;
       if (settings.dpopEnabled && armedFault !== 'header-omitted') {

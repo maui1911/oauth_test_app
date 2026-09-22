@@ -82,16 +82,22 @@ async function generate(alg) {
 
 function load() {
   try {
-    const parsed = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
-    return typeof parsed === 'object' && parsed !== null ? parsed : {};
-  } catch {
-    return {};
+    const raw = fs.readFileSync(KEYS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('client-keys.json is not a JSON object');
+    }
+    return parsed;
+  } catch (err) {
+    if (err.code === 'ENOENT') return {};
+    throw new Error(`Cannot read ${KEYS_FILE}: ${err.message}. Delete the file to regenerate.`);
   }
 }
 
 function save() {
   fs.mkdirSync(path.dirname(KEYS_FILE), { recursive: true });
-  fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
+  // 0o600: owner-only on Unix; on Windows this is a no-op but harmless.
+  fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2), { mode: 0o600 });
 }
 
 /** Loads the stored keys and generates whichever algorithm is still missing. */

@@ -28,10 +28,13 @@ app.post('/api/oauth/token', async (req, res) => {
       if (!clientKeys.isSupportedAlgorithm(clientAssertionAlg)) {
         return res.status(400).json({ error: `Unsupported client assertion algorithm: ${clientAssertionAlg}` });
       }
+      if (!clientAssertionAudience) {
+        return res.status(400).json({ error: 'clientAssertionAudience is required for private_key_jwt' });
+      }
       const assertion = clientKeys.signClientAssertion({
         alg: clientAssertionAlg,
         clientId,
-        audience: clientAssertionAudience || tokenUrl,
+        audience: clientAssertionAudience,
       });
       params.append('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
       params.append('client_assertion', assertion);
