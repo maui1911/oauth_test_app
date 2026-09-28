@@ -19,28 +19,39 @@ app.post('/api/oauth/token', async (req, res) => {
   const {
     tokenUrl, clientId, clientSecret, code, redirectUri,
     codeVerifier, grantType, scope, refreshToken, dpopProof,
-    clientAuthMethod, clientAssertionAlg, clientAssertionAudience
+    clientAuthMethod, clientAssertionAlg, clientAssertionAudience,
+    clientAssertion, basicClientIdInBody
   } = req.body;
   try {
     const params = new URLSearchParams();
-    params.append('client_id', clientId);
+    const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+    if (clientAuthMethod === 'client_secret_basic') {
+      headers['Authorization'] = basicAuthorization(clientId, clientSecret);
+      if (basicClientIdInBody) params.append('client_id', clientId);
+    } else {
+      params.append('client_id', clientId);
+    }
     if (clientAuthMethod === 'private_key_jwt') {
-      if (!clientKeys.isSupportedAlgorithm(clientAssertionAlg)) {
-        return res.status(400).json({ error: `Unsupported client assertion algorithm: ${clientAssertionAlg}` });
+      // Resent unchanged after use_dpop_nonce: the server raises that challenge before it spends the jti.
+      let assertion = clientAssertion;
+      if (!assertion) {
+        if (!clientKeys.isSupportedAlgorithm(clientAssertionAlg)) {
+          return res.status(400).json({ error: `Unsupported client assertion algorithm: ${clientAssertionAlg}` });
+        }
+        if (!clientAssertionAudience) {
+          return res.status(400).json({ error: 'clientAssertionAudience is required for private_key_jwt' });
+        }
+        assertion = clientKeys.signClientAssertion({
+          alg: clientAssertionAlg,
+          clientId,
+          audience: clientAssertionAudience,
+        });
       }
-      if (!clientAssertionAudience) {
-        return res.status(400).json({ error: 'clientAssertionAudience is required for private_key_jwt' });
-      }
-      const assertion = clientKeys.signClientAssertion({
-        alg: clientAssertionAlg,
-        clientId,
-        audience: clientAssertionAudience,
-      });
       params.append('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
       params.append('client_assertion', assertion);
       // Exposed on success and failure alike: a rejected assertion is exactly what needs inspecting.
       res.set('X-Client-Assertion', assertion);
-    } else if (clientSecret) {
+    } else if (clientAuthMethod !== 'client_secret_basic' && clientSecret) {
       params.append('client_secret', clientSecret);
     }
     params.append('grant_type', grantType);
@@ -54,7 +65,7 @@ app.post('/api/oauth/token', async (req, res) => {
       params.append('refresh_token', refreshToken);
     }
 
-    const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+    // An array goes out as separate header lines, which the duplicate-header fault relies on.
     if (dpopProof) headers['DPoP'] = dpopProof;
 
     const response = await axios.post(tokenUrl, params, { headers });
@@ -70,9 +81,18 @@ app.post('/api/oauth/token', async (req, res) => {
       error: error.response?.data?.error || error.message,
       details: error.response?.data,
       dpopNonce: nonce,
+      // In the body rather than as a header: a 401 with a Basic challenge makes the browser prompt for a login.
+      challenge: error.response?.headers?.['www-authenticate'],
     });
   }
 });
+
+// RFC 6749 §2.3.1: both parts are form-encoded first, so a ':' in either cannot shift the split.
+function basicAuthorization(clientId, clientSecret) {
+  const formEncode = (value) => new URLSearchParams({ v: value ?? '' }).toString().slice(2);
+  const credentials = `${formEncode(clientId)}:${formEncode(clientSecret)}`;
+  return `Basic ${Buffer.from(credentials, 'utf8').toString('base64')}`;
+}
 
 // Public keys for private_key_jwt, to be registered at the authorization server as jwks_uri.
 app.get('/api/jwks', (_req, res) => {

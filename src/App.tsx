@@ -10,6 +10,11 @@ import { DpopFaultInjector } from './components/DpopFaultInjector'
 import { ClientKeysPanel } from './components/ClientKeysPanel'
 import { DPoPService } from './services/dpopService'
 import { findFault, type DpopFaultKey } from './services/dpopFaults'
+import {
+  AUTHORIZE_VARIANTS,
+  findAuthorizeVariant,
+  type AuthorizeVariantKey,
+} from './services/authorizeVariants'
 import { getOAuthSettings } from './config/oauth'
 
 function classNames(...classes: string[]) {
@@ -68,6 +73,8 @@ function MainContent() {
   const [dpopThumbprint, setDpopThumbprint] = useState<string | null>(null)
   const [armedFault, setArmedFault] = useState<DpopFaultKey | null>(null)
   const [clientAssertion, setClientAssertion] = useState<string | null>(null)
+  const [authorizeVariant, setAuthorizeVariant] = useState<AuthorizeVariantKey>('none')
+  const [renewalChallenge, setRenewalChallenge] = useState<string | null>(null)
   const oauthService = OAuthService.getInstance()
 
   // Kept visible app-wide: an armed fault survives until some request consumes it, and without a
@@ -86,15 +93,23 @@ function MainContent() {
     // Survives the authorization code redirect: the callback route exchanges the code on this same
     // service instance before navigating here.
     setClientAssertion(oauthService.getLastClientAssertion())
+    setError(oauthService.getAuthorizationOutcome())
     if (getOAuthSettings().dpopEnabled) {
       DPoPService.getInstance().getThumbprint().then(setDpopThumbprint).catch(() => {})
     }
   }, [])
 
+  // A resource call may have renewed the tokens along the way.
+  const syncTokens = () => {
+    setAccessToken(oauthService.getAccessToken())
+    setRefreshToken(oauthService.getRefreshToken())
+    setTokenType(oauthService.getTokenType())
+  }
+
   const handleAuthorizationCodeFlow = async () => {
     try {
       setError(null);
-      const url = await oauthService.getAuthorizationUrl();
+      const url = await oauthService.getAuthorizationUrl(authorizeVariant);
       window.location.href = url;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start authorization flow');
@@ -104,9 +119,8 @@ function MainContent() {
   const handleClientCredentialsFlow = async () => {
     try {
       setError(null)
-      const response = await oauthService.getClientCredentialsToken()
-      setAccessToken(response.access_token)
-      setTokenType(oauthService.getTokenType())
+      await oauthService.getClientCredentialsToken()
+      syncTokens()
       if (getOAuthSettings().dpopEnabled) {
         DPoPService.getInstance().getThumbprint().then(setDpopThumbprint).catch(() => {})
       }
@@ -118,16 +132,25 @@ function MainContent() {
     }
   }
 
-  const handleGetProtectedResource = async () => {
+  const callProtectedResource = async (call: () => Promise<any>) => {
     try {
       setError(null)
-      const data = await oauthService.getProtectedResource()
-      setProtectedResourceData(data)
-      setDpopProof(oauthService.getLastDpopProof())
+      setProtectedResourceData(null)
+      setProtectedResourceData(await call())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get protected resource')
+    } finally {
+      setDpopProof(oauthService.getLastDpopProof())
+      setRenewalChallenge(oauthService.getLastRenewalChallenge())
+      syncTokens()
     }
   }
+
+  const handleGetProtectedResource = () =>
+    callProtectedResource(() => oauthService.getProtectedResource())
+
+  const handleGetProtectedResourceWithoutToken = () =>
+    callProtectedResource(() => oauthService.getProtectedResourceWithoutToken())
 
   const handleClearTokens = () => {
     oauthService.clearTokens()
@@ -137,6 +160,7 @@ function MainContent() {
     setDpopProof(null)
     setTokenType(null)
     setClientAssertion(null)
+    setRenewalChallenge(null)
   }
 
   const handleSettingsChange = () => {
@@ -173,8 +197,8 @@ function MainContent() {
                 <p className="text-sm text-amber-900">
                   A deliberate DPoP fault is armed:{' '}
                   <span className="font-semibold">{findFault(armedFault)?.label ?? armedFault}</span>
-                  . It applies to every request until you disarm it, and the automatic nonce retry is
-                  skipped.
+                  . It applies to every request until you disarm it
+                  {findFault(armedFault)?.allowsNonceRetry ? '.' : ', and the automatic nonce retry is skipped.'}
                 </p>
                 <button
                   onClick={() => DPoPService.getInstance().armFault(null)}
@@ -276,7 +300,7 @@ function MainContent() {
 
                   <div className="mt-6">
                     {error && (
-                      <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-md">
+                      <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-md whitespace-pre-line break-words">
                         {error}
                       </div>
                     )}
@@ -285,6 +309,23 @@ function MainContent() {
                       <div>
                         <h2 className="text-lg font-medium text-gray-900 mb-4">Authorization Code Flow</h2>
                         <div className="space-y-4">
+                          <div className="max-w-xl">
+                            <label className="block text-sm font-medium text-gray-700">Authorize request</label>
+                            <select
+                              value={authorizeVariant}
+                              onChange={(e) => setAuthorizeVariant(e.target.value as AuthorizeVariantKey)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            >
+                              {AUTHORIZE_VARIANTS.map((variant) => (
+                                <option key={variant.key} value={variant.key}>
+                                  {variant.label}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="mt-1 text-xs text-gray-500">
+                              Expected: {findAuthorizeVariant(authorizeVariant).expected}
+                            </p>
+                          </div>
                           <button
                             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
                             onClick={handleAuthorizationCodeFlow}
@@ -377,48 +418,62 @@ function MainContent() {
                       <JwtDump title="Client assertion (sent to token endpoint):" token={clientAssertion} />
                     )}
 
-                    {accessToken && (
-                      <div className="mt-6">
-                        <h2 className="text-lg font-medium text-gray-900 mb-4">Protected Resource</h2>
+                    <div className="mt-6">
+                      <h2 className="text-lg font-medium text-gray-900 mb-4">Protected Resource</h2>
+                      <div className="flex flex-wrap gap-2">
+                        {accessToken && (
+                          <button
+                            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                            onClick={handleGetProtectedResource}
+                          >
+                            Get Protected Resource
+                          </button>
+                        )}
                         <button
-                          className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-                          onClick={handleGetProtectedResource}
+                          className="bg-gray-100 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-200"
+                          onClick={handleGetProtectedResourceWithoutToken}
                         >
-                          Get Protected Resource
+                          Call without token
                         </button>
-                        {protectedResourceData && (
-                          <div className="mt-4">
-                            <h3 className="text-sm font-medium text-gray-700">Response:</h3>
-                            <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-96">
-                              {JSON.stringify(protectedResourceData, null, 2)}
-                            </pre>
-                          </div>
-                        )}
-                        {dpopProof && (
-                          <div className="mt-4">
-                            <h3 className="text-sm font-medium text-gray-700">DPoP Proof (sent to resource server):</h3>
-                            <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
-                              {dpopProof}
-                            </pre>
-                            {(() => {
-                              const decoded = decodeJwt(dpopProof)
-                              return decoded ? (
-                                <div className="mt-2">
-                                  <h4 className="text-xs font-medium text-gray-500">Decoded header:</h4>
-                                  <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
-                                    {JSON.stringify(decoded.header, null, 2)}
-                                  </pre>
-                                  <h4 className="text-xs font-medium text-gray-500 mt-2">Decoded payload:</h4>
-                                  <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
-                                    {JSON.stringify(decoded.payload, null, 2)}
-                                  </pre>
-                                </div>
-                              ) : null
-                            })()}
-                          </div>
-                        )}
                       </div>
-                    )}
+                      {renewalChallenge && (
+                        <p className="mt-2 text-xs text-gray-600">
+                          Token renewal triggered by HTTP 401 with{' '}
+                          <span className="font-mono break-all">WWW-Authenticate: {renewalChallenge}</span>
+                        </p>
+                      )}
+                      {protectedResourceData && (
+                        <div className="mt-4">
+                          <h3 className="text-sm font-medium text-gray-700">Response:</h3>
+                          <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-96">
+                            {JSON.stringify(protectedResourceData, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                      {dpopProof && (
+                        <div className="mt-4">
+                          <h3 className="text-sm font-medium text-gray-700">DPoP Proof (sent to resource server):</h3>
+                          <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
+                            {dpopProof}
+                          </pre>
+                          {(() => {
+                            const decoded = decodeJwt(dpopProof)
+                            return decoded ? (
+                              <div className="mt-2">
+                                <h4 className="text-xs font-medium text-gray-500">Decoded header:</h4>
+                                <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                                  {JSON.stringify(decoded.header, null, 2)}
+                                </pre>
+                                <h4 className="text-xs font-medium text-gray-500 mt-2">Decoded payload:</h4>
+                                <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                                  {JSON.stringify(decoded.payload, null, 2)}
+                                </pre>
+                              </div>
+                            ) : null
+                          })()}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </Tab.Panel>
                 <Tab.Panel>

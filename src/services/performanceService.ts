@@ -137,7 +137,8 @@ export class PerformanceService {
       result.success = response.ok;
       
       if (!response.ok) {
-        result.error = `HTTP Error: ${response.status} ${response.statusText}`;
+        const challenge = response.headers.get('www-authenticate');
+        result.error = `HTTP Error: ${response.status} ${response.statusText}${challenge ? ` (${challenge})` : ''}`;
       }
     } catch (error) {
       const endTime = performance.now();

@@ -34,6 +34,13 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
   };
 
   const usesPrivateKeyJwt = settings.clientAuthMethod === 'private_key_jwt';
+  const usesBasic = settings.clientAuthMethod === 'client_secret_basic';
+
+  const describeClientAuth = () => {
+    if (usesPrivateKeyJwt) return `private_key_jwt (${settings.clientAssertionAlg})`;
+    if (usesBasic) return `client_secret_basic${settings.basicClientIdInBody ? ' (client_id also in body)' : ''}`;
+    return 'client_secret_post';
+  };
 
   if (!isEditing) {
     return (
@@ -59,9 +66,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500">Client authentication</p>
-              <p className="text-sm text-gray-900">
-                {usesPrivateKeyJwt ? `private_key_jwt (${settings.clientAssertionAlg})` : 'client_secret_post'}
-              </p>
+              <p className="text-sm text-gray-900">{describeClientAuth()}</p>
             </div>
             {usesPrivateKeyJwt ? (
               <>
@@ -159,6 +164,7 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
               className={INPUT_CLASS}
             >
               <option value="client_secret_post">client_secret_post — shared secret in the request body</option>
+              <option value="client_secret_basic">client_secret_basic — shared secret in an Authorization: Basic header</option>
               <option value="private_key_jwt">private_key_jwt — signed client_assertion (RFC 7523)</option>
             </select>
           </div>
@@ -234,6 +240,20 @@ export function OAuthSettings({ onSettingsChange }: OAuthSettingsProps) {
                 className={INPUT_CLASS}
                 placeholder="your_client_secret"
               />
+              {usesBasic && (
+                <div className="mt-2 flex items-center">
+                  <input
+                    id="basic-client-id-in-body"
+                    type="checkbox"
+                    checked={settings.basicClientIdInBody}
+                    onChange={(e) => setSettings({ ...settings, basicClientIdInBody: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="basic-client-id-in-body" className="ml-2 block text-sm text-gray-700">
+                    Also send client_id in the body (optional with Basic; must match the header)
+                  </label>
+                </div>
+              )}
             </div>
           )}
           <div>

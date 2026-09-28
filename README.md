@@ -7,8 +7,9 @@ A modern React application for testing OAuth 2.1 flows, built with TypeScript an
 - 🔐 Support for OAuth 2.1 flows:
   - Authorization Code Flow with PKCE
   - Client Credentials Flow
-- 🔑 Client authentication with `client_secret_post` or `private_key_jwt` (RFC 7523), with a
-  self-hosted `jwks_uri` and downloadable certificates
+- 🔑 Client authentication with `client_secret_post`, `client_secret_basic` or `private_key_jwt`
+  (RFC 7523), with a self-hosted `jwks_uri` and downloadable certificates
+- 🧪 Deliberately malformed authorize requests and DPoP proofs, to check how the server rejects them
 - 🛠️ Configurable OAuth settings through web UI
 - 💾 Token persistence
 - 🔄 Automatic token refresh
@@ -62,8 +63,9 @@ The application allows you to configure OAuth settings through the web UI. All s
 
 - Base URL: The base URL of your OAuth server
 - Client ID: Your OAuth client ID
-- Client authentication: `client_secret_post` (default) or `private_key_jwt`
-- Client Secret: Your OAuth client secret (only for `client_secret_post`)
+- Client authentication: `client_secret_post` (default), `client_secret_basic` or `private_key_jwt`
+- Client Secret: Your OAuth client secret (not for `private_key_jwt`). With `client_secret_basic`
+  you can choose to send `client_id` in the body as well.
 - Assertion algorithm, assertion audience and JWKS public URL (only for `private_key_jwt`, see below)
 - Redirect URI: The callback URL for the Authorization Code flow
 - Protected Resource: The URL of your protected resource endpoint
@@ -97,6 +99,24 @@ locate the key by either the JWKS entry or the certificate. The `aud` claim is c
 token endpoint URL (default), the issuer (base URL) or a custom value. Each assertion is valid for
 60 seconds and carries a fresh `jti`. The UI shows the assertion (raw and decoded) after every
 token request, including rejected ones.
+
+### Error responses
+
+Errors from the authorization endpoint come back as a redirect to the callback. The app shows
+`error`, `error_description` and whether the returned `state` matches the one it sent. The
+"Authorize request" selector sends a deliberately malformed request (no `code_challenge`,
+`response_type=token`, a duplicated `state`, a redirect URI in other case) and shows the expected
+outcome next to it.
+
+Token endpoint and resource errors show the HTTP status, `error`, `error_description` and the
+`WWW-Authenticate` challenge. The proxy passes the token endpoint's challenge in its JSON body rather
+than as a header, because a 401 with a Basic challenge would make the browser prompt for a login.
+"Call without token" calls the protected resource without credentials, to see the challenge it
+answers with.
+
+When a resource call returns `error="invalid_token"`, the app renews the token once (via the
+refresh token, or a new client credentials request) and repeats the call. Other 401s, such as a
+DPoP proof or nonce problem, are shown as they are.
 
 ## Development
 
