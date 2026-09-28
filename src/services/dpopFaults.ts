@@ -19,6 +19,7 @@ export type DpopFaultKey =
   | "alg-none"
   | "jwk-missing"
   | "jwk-other"
+  | "jwk-private"
   | "signature-corrupt"
   | "htm-wrong"
   | "htu-wrong"
@@ -30,7 +31,10 @@ export type DpopFaultKey =
   | "nonce-garbage"
   | "ath-missing"
   | "ath-wrong"
-  | "header-omitted";
+  | "key-unbound"
+  | "header-omitted"
+  | "header-duplicate"
+  | "header-comma";
 
 export interface DpopFault {
   key: DpopFaultKey;
@@ -46,7 +50,7 @@ export interface DpopFault {
    * pass/fail; error_description is shown but never asserted, because it is prose that may be
    * reworded without the behaviour changing.
    */
-  expectedError: "invalid_dpop_proof" | "use_dpop_nonce";
+  expectedError: "invalid_dpop_proof" | "use_dpop_nonce" | "invalid_token";
   /**
    * Only meaningful while the server runs with DPoP nonces enabled. With nonces off these requests
    * are accepted, which is correct behaviour rather than a regression.
@@ -60,6 +64,11 @@ export interface DpopFault {
   requiresAcceptedPredecessor?: boolean;
   /** Set when the outcome cannot be trusted on a target, with the reason to show in the UI. */
   unreliableOn?: { target: DpopFaultTarget; reason: string };
+  /**
+   * Set when the proof is valid in itself, so a nonce challenge is part of the normal exchange and
+   * the nonce retry must still run to reach the check under test.
+   */
+  allowsNonceRetry?: boolean;
 }
 
 export const DPOP_FAULTS: DpopFault[] = [
@@ -105,6 +114,16 @@ export const DPOP_FAULTS: DpopFault[] = [
     label: "jwk of a different key",
     description:
       "Advertises a key that did not sign the proof. Catches a server that trusts jwk without verifying against it.",
+    stage: "proof",
+    targets: ["as", "rs"],
+    expectedError: "invalid_dpop_proof",
+  },
+  {
+    key: "jwk-private",
+    group: "Proof header",
+    label: "jwk carries a private key member",
+    description:
+      "Adds d to the advertised key. A key with private material must be refused outright; the d is a throwaway, not the real key.",
     stage: "proof",
     targets: ["as", "rs"],
     expectedError: "invalid_dpop_proof",
@@ -223,11 +242,43 @@ export const DPOP_FAULTS: DpopFault[] = [
   },
 
   {
+    key: "key-unbound",
+    group: "Token binding",
+    label: "Valid proof from a different key",
+    description:
+      "A correct proof, but signed by a key other than the one the token is bound to. The proof is fine and the token is not, so the answer is invalid_token.",
+    stage: "proof",
+    targets: ["rs"],
+    expectedError: "invalid_token",
+    allowsNonceRetry: true,
+  },
+
+  {
     key: "header-omitted",
     group: "Around the proof",
     label: "No proof sent at all",
     description:
       "Leaves the proof off entirely while the request is otherwise unchanged. Rejected only when the server requires DPoP.",
+    stage: "request",
+    targets: ["as", "rs"],
+    expectedError: "invalid_dpop_proof",
+  },
+  {
+    key: "header-duplicate",
+    group: "Around the proof",
+    label: "Two DPoP headers",
+    description:
+      "Sends two valid proofs as separate header lines. Which one counts would be ambiguous, so the request must be refused.",
+    stage: "request",
+    targets: ["as", "rs"],
+    expectedError: "invalid_dpop_proof",
+  },
+  {
+    key: "header-comma",
+    group: "Around the proof",
+    label: "Two proofs in one header",
+    description:
+      "The same two proofs joined by a comma in a single header, which HTTP treats as equal to two headers.",
     stage: "request",
     targets: ["as", "rs"],
     expectedError: "invalid_dpop_proof",

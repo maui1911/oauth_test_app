@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { DPoPService } from '../services/dpopService'
 import { OAuthService } from '../services/oauthService'
 import { getOAuthSettings } from '../config/oauth'
+import { challengeParam } from '../services/wwwAuthenticate'
 import {
   DPOP_FAULTS,
   expectedStatus,
@@ -112,7 +113,8 @@ export function DpopFaultInjector() {
       <p className="mt-1 text-sm text-gray-600">
         Arm one scenario, then use the normal buttons in this app to send the request. The fault
         stays armed until you disarm it, and survives a page reload. While a fault is armed the
-        automatic nonce retry is skipped, because a clean retry would hide the rejection.
+        automatic nonce retry is skipped, because a clean retry would hide the rejection. Only a
+        scenario whose proof is valid in itself still gets the retry.
       </p>
       <p className="mt-2 rounded-md bg-blue-50 p-3 text-sm text-blue-900">
         Starting the authorization code flow carries no proof: that redirect only sends{' '}
@@ -280,12 +282,4 @@ function Badge({ tone, children }: { tone: 'gray' | 'blue' | 'amber'; children: 
   return (
     <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${tones[tone]}`}>{children}</span>
   )
-}
-
-/**
- * Reads one auth-param out of a WWW-Authenticate challenge. The name is matched up to the "=", so
- * looking for `error` does not also hit `error_description`.
- */
-function challengeParam(challenge: string, name: string): string | undefined {
-  return new RegExp(`(?:^|[\\s,])${name}="([^"]*)"`).exec(challenge)?.[1]
 }

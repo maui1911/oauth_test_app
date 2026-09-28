@@ -42,6 +42,9 @@ export class DPoPService {
    */
   private lastJti: string | null = loadLastJti();
 
+  /** Signs the key-unbound proofs. Kept for the session so a nonce issued for it stays usable. */
+  private unboundKeyPair: Promise<CryptoKeyPair> | null = null;
+
   public static getInstance(): DPoPService {
     if (!DPoPService.instance) {
       DPoPService.instance = new DPoPService();
@@ -162,6 +165,7 @@ export class DPoPService {
 
     const keyPair = await this.getKeyPair();
     const publicJwk = await this.getPublicJwk();
+    let signingKey = keyPair.privateKey;
 
     const header: Record<string, unknown> = { typ: "dpop+jwt", alg: "ES256", jwk: publicJwk };
 
@@ -191,8 +195,21 @@ export class DPoPService {
       case "jwk-other":
         // Signed with the real key but advertising another one, which catches a server that reads
         // jwk without verifying the signature against it.
-        header.jwk = await unrelatedPublicJwk();
+        header.jwk = await publicMembers((await throwawayKeyPair()).publicKey);
         break;
+      case "jwk-private": {
+        // The server must refuse on presence alone, so a throwaway d keeps the real key out of its logs.
+        const { d } = await crypto.subtle.exportKey("jwk", (await throwawayKeyPair()).privateKey);
+        header.jwk = { ...publicJwk, d };
+        break;
+      }
+      case "key-unbound": {
+        this.unboundKeyPair ??= throwawayKeyPair();
+        const unbound = await this.unboundKeyPair;
+        header.jwk = await publicMembers(unbound.publicKey);
+        signingKey = unbound.privateKey;
+        break;
+      }
       case "htm-wrong":
         payload.htm = opts.htm.toUpperCase() === "POST" ? "GET" : "POST";
         break;
@@ -250,7 +267,7 @@ export class DPoPService {
     // WebCrypto ECDSA output is raw r||s (IEEE P1363) === JOSE format. No DER conversion.
     const signature = await crypto.subtle.sign(
       { name: "ECDSA", hash: "SHA-256" },
-      keyPair.privateKey,
+      signingKey,
       new TextEncoder().encode(signingInput)
     );
     let encodedSignature = base64UrlEncode(new Uint8Array(signature));
@@ -384,14 +401,13 @@ function generateJti(): string {
   return base64UrlEncode(arr);
 }
 
-/** A throwaway public key, for advertising a jwk that did not sign the proof. */
-async function unrelatedPublicJwk(): Promise<JsonWebKey> {
-  const keyPair = await crypto.subtle.generateKey(
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["sign", "verify"]
-  );
-  const jwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+/** A key unrelated to the one tokens are bound to, for proofs that must not involve the real key. */
+function throwawayKeyPair(): Promise<CryptoKeyPair> {
+  return crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+}
+
+async function publicMembers(publicKey: CryptoKey): Promise<JsonWebKey> {
+  const jwk = await crypto.subtle.exportKey("jwk", publicKey);
   return { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y };
 }
 

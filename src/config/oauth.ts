@@ -1,4 +1,4 @@
-export type ClientAuthMethod = "client_secret_post" | "private_key_jwt";
+export type ClientAuthMethod = "client_secret_post" | "client_secret_basic" | "private_key_jwt";
 export type ClientAssertionAlg = "RS256" | "ES256";
 /** Which value goes into the assertion's aud claim; servers differ in what they accept. */
 export type ClientAssertionAudience = "token_endpoint" | "issuer" | "custom";
@@ -12,6 +12,8 @@ export interface OAuthSettings {
   scope: string;
   dpopEnabled: boolean;
   clientAuthMethod: ClientAuthMethod;
+  /** client_secret_basic only: the header identifies the client, so client_id in the body is optional. */
+  basicClientIdInBody: boolean;
   clientAssertionAlg: ClientAssertionAlg;
   clientAssertionAudience: ClientAssertionAudience;
   clientAssertionCustomAudience: string;
@@ -32,6 +34,7 @@ const DEFAULT_SETTINGS: OAuthSettings = {
   scope: "openid profile email",
   dpopEnabled: false,
   clientAuthMethod: "client_secret_post",
+  basicClientIdInBody: false,
   clientAssertionAlg: "RS256",
   clientAssertionAudience: "token_endpoint",
   clientAssertionCustomAudience: "",
