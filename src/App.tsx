@@ -75,6 +75,7 @@ function MainContent() {
   const [clientAssertion, setClientAssertion] = useState<string | null>(null)
   const [authorizeVariant, setAuthorizeVariant] = useState<AuthorizeVariantKey>('none')
   const [renewalChallenge, setRenewalChallenge] = useState<string | null>(null)
+  const [refreshedAt, setRefreshedAt] = useState<string | null>(null)
   const oauthService = OAuthService.getInstance()
 
   // Kept visible app-wide: an armed fault survives until some request consumes it, and without a
@@ -132,6 +133,20 @@ function MainContent() {
     }
   }
 
+  // Lets a refresh be tested without waiting for the access token to expire.
+  const handleRefreshToken = async () => {
+    try {
+      setError(null)
+      await oauthService.refreshAccessToken()
+      syncTokens()
+      setRefreshedAt(new Date().toLocaleTimeString())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh the access token')
+    } finally {
+      setClientAssertion(oauthService.getLastClientAssertion())
+    }
+  }
+
   const callProtectedResource = async (call: () => Promise<any>) => {
     try {
       setError(null)
@@ -161,6 +176,7 @@ function MainContent() {
     setTokenType(null)
     setClientAssertion(null)
     setRenewalChallenge(null)
+    setRefreshedAt(null)
   }
 
   const handleSettingsChange = () => {
@@ -367,6 +383,17 @@ function MainContent() {
                               <pre className="mt-1 text-sm text-gray-500 bg-gray-50 p-2 rounded-md overflow-x-auto whitespace-pre-wrap break-all max-h-32">
                                 {refreshToken}
                               </pre>
+                              <div className="mt-2 flex items-center gap-3">
+                                <button
+                                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                                  onClick={handleRefreshToken}
+                                >
+                                  Refresh token
+                                </button>
+                                {refreshedAt && (
+                                  <span className="text-xs text-gray-500">Last refreshed at {refreshedAt}</span>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
